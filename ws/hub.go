@@ -6,26 +6,28 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// Message 定義了前後端溝通的格式
-type Message struct {
-	Name    string `json:"name"`
-	Content string `json:"content"`
-}
-
 type Hub struct {
-	Clients    map[*websocket.Conn]bool
+	// 🌟 關鍵升級：右邊的 value (原本是使用 bool)變成了 string，用來記憶客人的名字！
+	Clients    map[*websocket.Conn]string
 	Broadcast  chan Message
 	Register   chan *websocket.Conn
 	Unregister chan *websocket.Conn
+	
+}
+
+type ClientMessage struct {
+	Client *websocket.Conn
+	Msg    Message
 }
 
 func NewHub() *Hub {
+	
 	return &Hub{
-		Clients:    make(map[*websocket.Conn]bool),
+		Clients:    make(map[*websocket.Conn]string), // 對應改為 string
 		Broadcast:  make(chan Message),
 		Register:   make(chan *websocket.Conn),
 		Unregister: make(chan *websocket.Conn),
-	}
+	}	
 }
 
 func (h *Hub) Run() {
@@ -33,7 +35,7 @@ func (h *Hub) Run() {
 	for {
 		select {
 		case client := <-h.Register:
-			h.Clients[client] = true
+			h.Clients[client] = "" // 剛進門還沒講話，名字先留空
 			log.Println("✅ 客人上線")
 
 		case client := <-h.Unregister:

@@ -141,6 +141,33 @@
             background-color: #fff;
         }
 
+        /* 新增：表情符號選擇器面板 */
+        #emoji-picker {
+            display: none; /* 預設隱藏 */
+            position: absolute;
+            bottom: 60px; /* 浮動在輸入框上方 */
+            right: 120px;
+            background-color: #000;
+            border: var(--retro-border);
+            padding: 10px;
+            width: 250px;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 10px;
+            box-shadow: 0 0 10px var(--retro-green);
+            z-index: 20;
+        }
+
+        .emoji-item {
+            font-size: 30px;
+            cursor: pointer;
+            text-align: center;
+            transition: transform 0.1s;
+        }
+
+        .emoji-item:hover {
+            transform: scale(1.3); /* 滑鼠游標移過去會放大 */
+        }
+
         /* =========================================
            彈幕動畫 (Danmaku)
            ========================================= */
@@ -217,7 +244,11 @@
         <div id="input-area">
             <span style="font-size: 28px; line-height: 40px;" id="display-name">Guest></span>
             <input type="text" id="message-input" placeholder="Enter message or /command..." autocomplete="off">
+            <button id="emoji-btn">😀</button> <!-- 新增：笑臉按鈕 -->
             <button id="send-btn">SEND</button>
+            
+            <!-- 新增：隱藏的表情符號選單 -->
+            <div id="emoji-picker"></div>
         </div>
     </div>
 
@@ -233,6 +264,8 @@
             
             const messageInput = document.getElementById('message-input');
             const sendBtn = document.getElementById('send-btn');
+            const emojiBtn = document.getElementById('emoji-btn'); // 新增取得按鈕
+            const emojiPicker = document.getElementById('emoji-picker'); // 新增取得選單
             const chatSidebar = document.getElementById('chat-sidebar');
             const danmakuZone = document.getElementById('danmaku-zone');
 
@@ -316,6 +349,45 @@
             sendBtn.addEventListener('click', sendMessage);
             messageInput.addEventListener('keypress', function(e) {
                 if (e.key === 'Enter') sendMessage();
+            });
+
+            // ==========================================
+            // X. 表情符號選單邏輯 (全新加入)
+            // ==========================================
+            // 1. 準備你要提供的表情符號清單
+            const emojis = ['😀', '😂', '😍', '😎', '😭', '😡', '👍', '🙏', '🚀', '🔥', '🐛', '👽', '👻', '🍕', '🎮'];
+            
+            // 2. 用迴圈把表情符號塞進面板裡
+            emojis.forEach(emoji => {
+                const span = document.createElement('span');
+                span.className = 'emoji-item';
+                span.innerText = emoji;
+                
+                // 當有人點擊這個表情時...
+                span.onclick = function() {
+                    messageInput.value += emoji; // 把表情附加到輸入框原本的文字後面
+                    messageInput.focus();        // 讓游標回到輸入框
+                    emojiPicker.style.display = 'none'; // 點完後自動關閉選單
+                };
+                emojiPicker.appendChild(span);
+            });
+
+            // 3. 點擊笑臉按鈕：開關選單
+            emojiBtn.addEventListener('click', function(e) {
+                e.stopPropagation(); // 防止點擊事件往上傳遞，導致馬上被下面的全域監聽器關閉
+                if (emojiPicker.style.display === 'grid') {
+                    emojiPicker.style.display = 'none';
+                } else {
+                    emojiPicker.style.display = 'grid'; // 打開並用九宮格 (grid) 排列
+                }
+            });
+
+            // 4. 點擊畫面其他地方時，自動關閉選單 (優化體驗)
+            document.addEventListener('click', function(e) {
+                // 如果點擊的地方不是選單本身，也不是那顆笑臉按鈕，就關閉選單
+                if (e.target !== emojiPicker && e.target !== emojiBtn && !emojiPicker.contains(e.target)) {
+                    emojiPicker.style.display = 'none';
+                }
             });
 
             // ==========================================
