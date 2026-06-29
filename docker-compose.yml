@@ -1,0 +1,8 @@
+version: '3.8'
+services:
+  redis:
+    image: redis:7-alpine       # 告訴 Docker：去雲端幫我抓第 7 版的輕量級 Redis
+    container_name: chat-redis  # 給這個貨櫃取個名字
+    ports:
+      - "6379:6379"             # 把貨櫃裡的 6379 洞口，接上你電腦的 6379 洞口
+    restart: always             # 電腦重開機時，幫我自動啟動

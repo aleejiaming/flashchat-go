@@ -8,15 +8,27 @@ import (
 	// 如果你當初建立專案是用 go mod init flashchat-go，那這裡就是 flashchat-go
 	"flashchat-go/handler"
 	"flashchat-go/ws"
+		// 引入 Redis 套件
+	"github.com/go-redis/redis/v8"
 )
 
 func main() {
+	// ==========================================
+	// 🌟 新增：準備好 Redis 的連線鑰匙 (Client)
+	// ==========================================
+	rdb := redis.NewClient(&redis.Options{
+		Addr: "localhost:6379", // 假設你的 Redis 跑在本機預設 Port
+	})
+
+
 	// ==========================================
 	// 🌟 核心組裝區：依賴注入 (Dependency Injection)
 	// ==========================================
 	
 	// 1. 誕生一位經理 (Hub 廣播中心)
-	hub := ws.NewHub()
+	//hub := ws.NewHub()
+	// 這樣經理就可以在廣播時，順便把資料寫入 Redis 了。
+	hub := ws.NewHub(rdb)
 
 	// 2. 讓經理去背景開始工作 (開始監聽上下線與廣播通道)
 	go hub.Run()
