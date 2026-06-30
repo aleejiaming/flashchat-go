@@ -22,7 +22,7 @@ jobs:
     - name: 🐹 步驟 2 - 在雲端電腦上安裝 Go 語言環境
       uses: actions/setup-go@v5
       with:
-        go-version: '1.20' # 💡 請把這裡改成你電腦上安裝的 Go 版本 (例如 1.22)
+        go-version: '1.26.x' # 💡 請把這裡改成你電腦上安裝的 Go 版本 (例如 1.22)
 
     - name: 📦 步驟 3 - 下載專案需要的套件 (例如 Redis, Gin)
       run: go mod tidy
