@@ -1,0 +1,32 @@
+# 機器人的名字：Go 自動化測試流水線
+name: Go Test Pipeline
+
+# 觸發條件：什麼時候要叫機器人起床工作？
+on:
+  push:
+    branches: [ "main" ] # 當有人直接 push 到 main 分支時
+  pull_request:
+    branches: [ "main" ] # 當有人發起 PR 準備合併到 main 分支時
+
+# 工作內容：
+jobs:
+  test:
+    # 租一台免費的 Linux (Ubuntu) 雲端電腦來跑測試
+    runs-on: ubuntu-latest 
+
+    # 機器人要執行的 SOP 步驟
+    steps:
+    - name: 📥 步驟 1 - 把最新的程式碼下載到雲端電腦
+      uses: actions/checkout@v4
+
+    - name: 🐹 步驟 2 - 在雲端電腦上安裝 Go 語言環境
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.20' # 💡 請把這裡改成你電腦上安裝的 Go 版本 (例如 1.22)
+
+    - name: 📦 步驟 3 - 下載專案需要的套件 (例如 Redis, Gin)
+      run: go mod tidy
+
+    - name: 🧪 步驟 4 - 執行所有的自動化測試考卷！
+      # ./... 代表「從根目錄開始，幫我尋找所有的 _test.go 考卷並全部執行」
+      run: go test -v ./...
