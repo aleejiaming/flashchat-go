@@ -8,7 +8,8 @@ import (
 	// 如果你當初建立專案是用 go mod init flashchat-go，那這裡就是 flashchat-go
 	"flashchat-go/handler"
 	"flashchat-go/ws"
-		// 引入 Redis 套件
+
+	// 引入 Redis 套件
 	"github.com/go-redis/redis/v8"
 )
 
@@ -20,11 +21,10 @@ func main() {
 		Addr: "localhost:6379", // 假設你的 Redis 跑在本機預設 Port
 	})
 
-
 	// ==========================================
 	// 🌟 核心組裝區：依賴注入 (Dependency Injection)
 	// ==========================================
-	
+
 	// 1. 誕生一位經理 (Hub 廣播中心)
 	//hub := ws.NewHub()
 	// 這樣經理就可以在廣播時，順便把資料寫入 Redis 了。
@@ -36,12 +36,10 @@ func main() {
 	// 3. 聘請一位服務生，並把經理的聯絡方式 (hub) 配發給他
 	wsHandler := handler.NewWSHandler(hub)
 
-
-
 	// ==========================================
 	// 📍 路由綁定與伺服器啟動
 	// ==========================================
-	
+
 	// 設定路由 1：網頁靜態畫面櫃台
 	http.Handle("/", http.FileServer(http.Dir("./public")))
 
