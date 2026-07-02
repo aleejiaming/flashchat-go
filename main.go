@@ -3,14 +3,14 @@ package main
 import (
 	"database/sql"
 	"flashchat-go/handler"
+	"flashchat-go/internal/logger"
 	"flashchat-go/repository" // 引入倉管部門
 	"flashchat-go/ws"
-	"log"
+	"log/slog"
 	"net/http"
+	"os"
 
 	"github.com/go-redis/redis/v8"
-	// 🌟 新增的套件：
-
 	_ "github.com/lib/pq" // 引入 PostgreSQL 驅動 (前面加底線代表自動註冊)
 )
 
@@ -18,17 +18,21 @@ import (
 // 👷 背景打工人邏輯：死死盯著排隊箱，把資料寫進 DB
 // ==========================================
 func dbWorker(id int, queue chan ws.Message, repo repository.MessageRepository) {
-	log.Printf("👷 [打工人 %d] 已上線，隨時準備寫入 PostgreSQL...\n", id)
+	slog.Info("打工人已上線", "component", "hub", "acation", "save_msg")
 	// range queue 會變成一個無窮迴圈，只要箱子裡有東西，打工人就會拿出來做
 	for msg := range queue {
 		err := repo.SaveMessage(msg)
 		if err != nil {
-			log.Printf("❌ [打工人 %d] 寫入 PostgreSQL 失敗: %v\n", id, err)
+			slog.Error("執行PostgreSQL 失敗", "component", "database", "action", "save_msg", "error", err.Error())
 		}
 	}
 }
 
 func main() {
+	//導入結構化日誌
+	logger.InitLogger()
+	slog.Info("FlashChat 服務啟動", "component", "server")
+
 	// ==========================================
 	// 準備好 Redis 的連線鑰匙 (Client)
 	// ==========================================
@@ -43,7 +47,11 @@ func main() {
 	connStr := "postgres://postgres:Ming741852@localhost:5432/flashchat?sslmode=disable"
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
-		log.Fatal("無法連線至 PostgreSQL:", err)
+		slog.Error("無法連線至 PostgreSQL",
+			"component", "database",
+			"host", "localhost",
+			"db_name", "falshchat",
+			"error", err.Error())
 	}
 
 	// 2. 聘請倉管員 (Repository)
@@ -81,8 +89,13 @@ func main() {
 	// 設定路由 2：WebSocket 專屬櫃台 (交給我們剛剛聘請的服務生)
 	http.HandleFunc("/ws", wsHandler.HandleConnections)
 
-	log.Println("🚀 復古終端機伺服器已啟動於 http://localhost:8080")
-	if err := http.ListenAndServe(":8080", nil); err != nil {
-		log.Fatal("伺服器啟動失敗:", err)
+	// 1. 將 Port 抽成變數，避免重複硬編碼
+	port := "8080"
+	addr := ":" + port
+	slog.Info("復古終端機伺服器已啟動", "component", "server", "port", port, "service", "flashchat")
+	if err := http.ListenAndServe(addr, nil); err != nil {
+		slog.Error("伺服器啟動失敗", "component", "server", "addr", addr, "error", err.Error())
+		os.Exit(1)
 	}
+
 }

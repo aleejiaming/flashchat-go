@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -48,14 +48,19 @@ func NewHub(rdb *redis.Client, saveQueue chan Message) *Hub {
 }
 
 func (h *Hub) Run() {
-	log.Println("📡 [Hub] 廣播中心管理員已就緒...")
+	slog.Info("📡 [Hub] 廣播中心管理員已就緒", "component", "hub")
 	ctx := context.Background()
 
 	for {
 		select {
 		case client := <-h.Register:
 			h.Clients[client] = ""
-			log.Println("✅ 客人上線")
+			// 組合拳：記錄部門 + 動作 + 當前人數
+			slog.Info("客人建立連線",
+				"component", "hub",
+				"action", "client_connect",
+				"active_clients", len(h.Clients),
+			)
 
 			// 🌟 ZRANGE 讀取：因為我們有定時修剪，所以 ZSET 裡剩下的保證都是 7 天內的
 			// 0 到 -1 代表從第一筆拿到最後一筆 (按時間順序)
@@ -77,11 +82,12 @@ func (h *Hub) Run() {
 		case client := <-h.Unregister:
 			if name, ok := h.Clients[client]; ok {
 				delete(h.Clients, client)
-				log.Printf("👋 客人下線: %s\n", name)
+				slog.Info("👋 客人下線", "client_name", name, "active_clients", len(h.Clients))
 			}
 		// ------------------------------------------
 		// 📢 處理廣播訊息 (寫入 Redis ZSET)
 		// ------------------------------------------
+
 		case clientMsg := <-h.Broadcast:
 			// 記住客人的名字
 			h.Clients[clientMsg.Client] = clientMsg.Msg.Name

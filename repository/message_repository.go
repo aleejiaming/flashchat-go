@@ -2,7 +2,7 @@ package repository
 
 import (
 	"database/sql"
-	"log"
+	"log/slog"
 
 	"flashchat-go/ws"
 )
@@ -32,11 +32,21 @@ func NewPGMessageRepository(db *sql.DB) MessageRepository {
 		content TEXT,
 		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 	)`
+	// 修改 1：拿掉冒號，統一標題風格，並加入 table 名稱作為上下文
 	_, err := db.Exec(query)
 	if err != nil {
-		log.Fatal("❌ 無法建立 chat_messages 資料表:", err)
+		slog.Error("建立資料表失敗",
+			"component", "database",
+			"table", "chat_messages",
+			"error", err.Error(),
+		)
+	} else {
+		// 成功時留下一筆 Info，方便確認連線與初始化正常
+		slog.Info("資料表初始化成功",
+			"component", "database",
+			"table", "chat_messages",
+		)
 	}
-
 	return &pgMessageRepository{db: db}
 }
 
@@ -48,8 +58,21 @@ func (r *pgMessageRepository) SaveMessage(msg ws.Message) error {
 	if msg.IsPrivate {
 		return nil
 	}
-	log.Printf("進入 SaveMessage，準備寫入 %s: %s", msg.Name, msg.Content)
+	// 修改 2：將傳統 log.Printf 換成 slog.Debug 或 slog.Info
+	slog.Debug("準備寫入歷史訊息",
+		"component", "database",
+		"sender_name", msg.Name,
+		"msg_length", len(msg.Content), // 💡 關鍵技巧：記錄長度而非明文
+	)
 	query := `INSERT INTO chat_messages (name, content) VALUES ($1, $2)`
 	_, err := r.db.Exec(query, msg.Name, msg.Content)
+	// 修改 3：在實際發生錯誤的地方，補上錯誤日誌
+	if err != nil {
+		slog.Error("PostgreSQL 寫入失敗",
+			"component", "database",
+			"sender_name", msg.Name,
+			"error", err.Error(),
+		)
+	}
 	return err
 }
