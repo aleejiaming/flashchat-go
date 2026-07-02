@@ -3,7 +3,9 @@ package ws
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"fmt"
+	"log/slog"
+	"time"
 
 	"github.com/go-redis/redis/v8"
 	"github.com/gorilla/websocket"
@@ -24,6 +26,7 @@ type Hub struct {
 	Unregister chan *websocket.Conn
 	// 🌟 新增 1：經理現在口袋裡多了一把打開 Redis 倉庫的鑰匙
 	RedisClient *redis.Client
+	SaveQueue   chan Message // 🌟 補上這個：歷史紀錄排隊箱
 }
 
 type ClientMessage struct {
@@ -31,56 +34,69 @@ type ClientMessage struct {
 	Msg    Message
 }
 
-func NewHub(rdb *redis.Client) *Hub {
+func NewHub(rdb *redis.Client, saveQueue chan Message) *Hub {
 
 	return &Hub{
 		Clients:     make(map[*websocket.Conn]string), // 對應改為 string
 		Broadcast:   make(chan ClientMessage),
 		Register:    make(chan *websocket.Conn),
 		Unregister:  make(chan *websocket.Conn),
-		RedisClient: rdb, // 把鑰匙收進口袋
+		RedisClient: rdb,       // 把鑰匙收進口袋
+		SaveQueue:   saveQueue, // 🌟 補上這個：把參數收進口袋
+
 	}
 }
 
 func (h *Hub) Run() {
-	log.Println("📡 [Hub] 廣播中心管理員已就緒...")
+	slog.Info("📡 [Hub] 廣播中心管理員已就緒", "component", "hub")
 	ctx := context.Background()
 
 	for {
 		select {
 		case client := <-h.Register:
 			h.Clients[client] = ""
-			log.Println("✅ 客人上線")
+			// 組合拳：記錄部門 + 動作 + 當前人數
+			slog.Info("客人建立連線",
+				"component", "hub",
+				"action", "client_connect",
+				"active_clients", len(h.Clients),
+			)
 
-			// 🌟 新增 3：客人一進門，經理立刻去 Redis 翻找歷史紀錄！
-			// LRange 意思是「拿出 List 裡面的資料」，0 到 -1 代表「從第一筆拿到最後一筆」
-			history, err := h.RedisClient.LRange(ctx, "chat_history", 0, -1).Result()
+			// 🌟 ZRANGE 讀取：因為我們有定時修剪，所以 ZSET 裡剩下的保證都是 7 天內的
+			// 0 到 -1 代表從第一筆拿到最後一筆 (按時間順序)
+			history, err := h.RedisClient.ZRange(ctx, "chat_history", 0, -1).Result()
+			// 筆記 因為 ZRange 是用來操作 Redis 的 Sorted Set（有序集合） 資料型態，
+			// 所以你可以把 "chat_history" 想像成是這整條聊天紀錄集合的「總名稱」。
+			// 所有使用者的聊天紀錄（或這房間的紀錄）都被塞進了這個叫 "chat_history" 的 Key 裡面。
 			if err == nil {
-				// 把歷史紀錄一筆一筆發給這個剛進門的客人
 				for _, jsonStr := range history {
 					var oldMsg Message
-					// 把 JSON 字串解開變回 Message 結構體
 					json.Unmarshal([]byte(jsonStr), &oldMsg)
-					// 偷偷塞給這個客人 (不廣播)
+					// 偷偷塞給這個剛進門的客人，不廣播給其他人
 					client.WriteJSON(oldMsg)
 				}
 			}
-
+		// ------------------------------------------
+		// 🔴 客人下線
+		// ------------------------------------------
 		case client := <-h.Unregister:
 			if name, ok := h.Clients[client]; ok {
 				delete(h.Clients, client)
-				log.Printf("👋 客人下線: %s\n", name)
+				slog.Info("👋 客人下線", "client_name", name, "active_clients", len(h.Clients))
 			}
+		// ------------------------------------------
+		// 📢 處理廣播訊息 (寫入 Redis ZSET)
+		// ------------------------------------------
 
 		case clientMsg := <-h.Broadcast:
+			// 記住客人的名字
 			h.Clients[clientMsg.Client] = clientMsg.Msg.Name
-
+			// 找主廚加工訊息
 			processor := GetProcessor(clientMsg.Msg.Content)
 			finalMsg := processor.Process(clientMsg.Msg)
-
+			// 🔒 模式 A/B：私訊或系統悄悄話 (注意：私訊【不會】存入 Redis 歷史紀錄)
 			if finalMsg.IsPrivate {
 				if finalMsg.TargetName != "" {
-					// 模式 A：點對點私訊
 					targetFound := false
 					for clientConn, clientName := range h.Clients {
 						if clientName == finalMsg.TargetName {
@@ -97,20 +113,25 @@ func (h *Hub) Run() {
 						clientMsg.Client.WriteJSON(errorMsg)
 					}
 				} else {
-					// 模式 B：系統悄悄話 (/help, /weather)
 					clientMsg.Client.WriteJSON(finalMsg)
 				}
 			} else {
 				// 🌍 模式 C：全伺服器廣播 (一般的聊天訊息)
 
-				// 🌟 新增 4：把準備廣播的訊息，打包成 JSON 字串
+				// 🌟 1. 取得現在的時間戳
+				now := time.Now().Unix() //取得現在的時間
 				msgBytes, _ := json.Marshal(finalMsg)
+				// 🌟 2. 存入 Redis ZSET (分數 = 時間戳)、以及對話紀錄
+				h.RedisClient.ZAdd(ctx, "chat_history", &redis.Z{
+					Score:  float64(now),
+					Member: string(msgBytes),
+				})
+				// 🌟 3. 執行清理：移除 7 天前的舊訊息 (7天 = 604800 秒)
+				sevenDaysAgo := now - 604800
+				h.RedisClient.ZRemRangeByScore(ctx, "chat_history", "-inf", fmt.Sprintf("%d", sevenDaysAgo))
 
-				// 🌟 新增 5：把 JSON 字串塞進 Redis 的 "chat_history" 列表的最右邊 (RPush)
-				h.RedisClient.RPush(ctx, "chat_history", string(msgBytes))
-
-				// 🌟 新增 6：修剪列表 (LTrim)，永遠只保留最新的 50 筆！(-50 到 -1 代表倒數 50 個)
-				h.RedisClient.LTrim(ctx, "chat_history", -50, -1)
+				// 🌟 補上這行！把訊息丟進排隊箱，讓 PostgreSQL 打工人去存檔
+				h.SaveQueue <- finalMsg
 
 				// 最後，照常廣播給所有人
 				for client := range h.Clients {

@@ -4,5 +4,24 @@ services:
     image: redis:7-alpine       # 告訴 Docker：去雲端幫我抓第 7 版的輕量級 Redis
     container_name: chat-redis  # 給這個貨櫃取個名字
     ports:
-      - "6379:6379"             # 把貨櫃裡的 6379 洞口，接上你電腦的 6379 洞口
+      - "6379:6379"             # 把貨櫃裡的 6379 洞口，接上你電腦的 6379 洞
+
+    # 🌟 商業級防禦機制：資料持久化掛載 (Volume)
+    # 把你電腦上的 ./redis_data 資料夾，與容器內的 /data 資料夾連通！
+    # 以後就算貨櫃被炸毀，只要你筆電的資料夾還在，歷史紀錄就永遠不會消失。
+    volumes:
+      - ./redis_data:/data
+
+  postgres:
+      image: postgres:15-alpine
+      environment:
+       # 設定資料庫的超級管理員帳號與密碼 (本地開發用)
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: Ming741852
+      POSTGRES_DB: flashchat
+    ports:
+      - "5432:5432" # 開放 5432 讓 Go 可以連進來
     restart: always             # 電腦重開機時，幫我自動啟動
+    volumes:
+      # 掛載硬碟，確保資料庫重啟時資料不會不見！
+      - ./pg_data:/var/lib/postgresql/data
