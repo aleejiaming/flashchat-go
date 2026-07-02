@@ -57,9 +57,9 @@ func (h *WSHandler) HandleConnections(w http.ResponseWriter, r *http.Request) {
 	// 報到時，把客人丟給經理的上線通道
 	h.Hub.Register <- conn
 
-	// ⏱️ 踢人機制 1：客人一進門，立刻設定 10 分鐘的死亡倒數計時！
+	// ⏱️ 配合心跳機制 減少 zombie 連線，設定 60 秒的讀取時間限制，超過就自動斷線
 
-	conn.SetReadDeadline(time.Now().Add(10 * time.Minute)) // 如果 10 分鐘內沒收到訊息，conn.ReadJSON 就會直接報錯，進而中斷連線。
+	conn.SetReadDeadline(time.Now().Add(60 * time.Second)) // 如果 1分鐘內沒收到訊息，conn.ReadJSON 就會直接報錯，進而中斷連線。
 
 	for {
 		var rawMsg ws.Message
@@ -73,7 +73,7 @@ func (h *WSHandler) HandleConnections(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// ⏱️ 踢人機制 2：客人有講話了！馬上幫他重置另外 10 分鐘的倒數計時器
-		conn.SetReadDeadline(time.Now().Add(10 * time.Minute))
+		conn.SetReadDeadline(time.Now().Add(1 * time.Second))
 
 		// 🌟 核心修改：服務生在這裡負責把「客人」跟「紙條」裝進透明信封袋！
 		clientMsg := ws.ClientMessage{
