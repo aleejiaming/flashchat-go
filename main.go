@@ -1,14 +1,20 @@
 package main
 
 import (
+	"context"
 	"database/sql"
+	"errors"
+	"log/slog"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
 	"flashchat-go/handler"
 	"flashchat-go/internal/logger"
 	"flashchat-go/repository" // 引入倉管部門
 	"flashchat-go/ws"
-	"log/slog"
-	"net/http"
-	"os"
 
 	"github.com/go-redis/redis/v8"
 	_ "github.com/lib/pq" // 引入 PostgreSQL 驅動 (前面加底線代表自動註冊)
@@ -44,6 +50,7 @@ func main() {
 	// 🌟 新增：準備 PostgreSQL 連線與啟動打工人
 	// ==========================================
 	// 1. 連線到 PostgreSQL (帳密對應你 docker-compose 的設定)
+
 	connStr := "postgres://postgres:Ming741852@localhost:5432/flashchat?sslmode=disable"
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
@@ -91,11 +98,42 @@ func main() {
 
 	// 1. 將 Port 抽成變數，避免重複硬編碼
 	port := "8080"
-	addr := ":" + port
-	slog.Info("復古終端機伺服器已啟動", "component", "server", "port", port, "service", "flashchat")
-	if err := http.ListenAndServe(addr, nil); err != nil {
-		slog.Error("伺服器啟動失敗", "component", "server", "addr", addr, "error", err.Error())
-		os.Exit(1)
+	srv := &http.Server{
+		Addr:    ":" + port,
+		Handler: nil, // 使用預設的 ServeMux
 	}
 
+	go func() {
+		slog.Info("復古終端機伺服器已啟動", "component", "server", "port", port, "service", "flashchat")
+		// 如果錯誤不是因為「伺服器正常關閉」引起的，就報錯
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			slog.Error("伺服器啟動失敗", "component", "server", "addr", srv.Addr, "error", err.Error())
+			os.Exit(1)
+		}
+	}()
+
+	// ==========================================
+	// 🛑 6. 實作優雅關機 (Graceful Shutdown)
+	// ==========================================
+	// 建立一個通道來接收作業系統的訊號
+
+	// 建立一個通道來接收作業系統的訊號
+	quit := make(chan os.Signal, 1)
+	// 監聽 SIGINT (Ctrl+C) 與 SIGTERM (Docker/K8s 關閉容器的訊號)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+
+	// 主執行序會卡在這裡，直到收到訊號
+	<-quit
+	slog.Warn("收到終止訊號，準備進行優雅關機...", "component", "server")
+
+	// 建立一個有 5 秒超時限制的 Context
+	// 意思是：給系統 5 秒鐘處理尚未完成的請求，超時就強制關閉
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel() //確保資源在函數結束時會釋放
+
+	// 呼叫 srv.Shutdown()，這會停止接收新連線，並等待舊連線處理完畢
+	if err := srv.Shutdown(ctx); err != nil {
+		slog.Error("伺服器強制關閉異常", "component", "server", "error", err.Error())
+	}
+	slog.Info("伺服器資源已釋放，安全結束程式", "component", "server")
 }

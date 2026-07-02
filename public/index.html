@@ -284,12 +284,29 @@
                     appendSidebarMessage("SYSTEM", "Connected to FlashChat server.");
                 };
 
+                // 🌟 新增：連線成功後，啟動心跳定時器 (每 30 秒打一次卡)
+                heartbeatTimer = setInterval(() => {
+                    if (socket.readyState === WebSocket.OPEN) {
+                        // 發送心跳指令給後端工廠
+                        socket.send(JSON.stringify({
+                            name: myNickname,
+                            content: "/ping"
+                        }));
+                    }
+                }, 30000); // 30000 毫秒 = 30 秒
+            };
+
                 // 當收到伺服器廣播時
                 socket.onmessage = function(event) {
                     const msg = JSON.parse(event.data);
+                    // 🌟 新增：如果是心跳回音，不要印在畫面上，也不要產生彈幕！
+                        if (msg.content === "pong") {
+                        console.log("收到伺服器心跳確認"); // 在開發者 F12 偷看就好
+                        return; // 直接結束，不要執行下面的 appendSidebarMessage
+                 }
+                    
                     const now = new Date();
                     const timeStr = now.toTimeString().split(' ')[0];
-
                     appendSidebarMessage(timeStr, msg.name, msg.content);
                     fireDanmaku(msg.content);
                 };
@@ -297,6 +314,9 @@
                 // 當連線斷開時
                 socket.onclose = function() {
                     appendSidebarMessage("SYSTEM", "Connection lost. Reconnecting in 3s...");
+
+                    // 🌟 新增：斷線時，記得把定時器清掉，避免報錯
+                    clearInterval(heartbeatTimer);
                     setTimeout(connectWebSocket, 3000); // 3 秒後自動重連
                 };
             }
