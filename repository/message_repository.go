@@ -61,16 +61,16 @@ func (r *pgMessageRepository) SaveMessage(msg ws.Message) error {
 	// 修改 2：將傳統 log.Printf 換成 slog.Debug 或 slog.Info
 	slog.Debug("準備寫入歷史訊息",
 		"component", "database",
-		"sender_name", msg.Name,
+		"sender_name", msg.Username,
 		"msg_length", len(msg.Content), // 💡 關鍵技巧：記錄長度而非明文
 	)
 	query := `INSERT INTO chat_messages (name, content) VALUES ($1, $2)`
-	_, err := r.db.Exec(query, msg.Name, msg.Content)
+	_, err := r.db.Exec(query, msg.Username, msg.Content)
 	// 修改 3：在實際發生錯誤的地方，補上錯誤日誌
 	if err != nil {
 		slog.Error("PostgreSQL 寫入失敗",
 			"component", "database",
-			"sender_name", msg.Name,
+			"sender_name", msg.Username,
 			"error", err.Error(),
 		)
 	}

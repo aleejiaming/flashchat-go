@@ -12,7 +12,7 @@ import (
 )
 
 type Message struct {
-	Name       string `json:"name"`
+	Username   string `json:"username"`
 	Content    string `json:"content"`
 	IsPrivate  bool   `json:"-"` // 加上 json:"-" 代表這只是後端內部用的，不會傳給前端
 	TargetName string `json:"-"` // 🌟 新增：這封信的「指定收件人」是誰？
@@ -90,7 +90,7 @@ func (h *Hub) Run() {
 
 		case clientMsg := <-h.Broadcast:
 			// 記住客人的名字
-			h.Clients[clientMsg.Client] = clientMsg.Msg.Name
+			h.Clients[clientMsg.Client] = clientMsg.Msg.Username
 			// 找主廚加工訊息
 			processor := GetProcessor(clientMsg.Msg.Content)
 			finalMsg := processor.Process(clientMsg.Msg)
@@ -107,8 +107,8 @@ func (h *Hub) Run() {
 					clientMsg.Client.WriteJSON(finalMsg)
 					if !targetFound {
 						errorMsg := Message{
-							Name:    "🤖 系統機器人",
-							Content: "找不到使用者「" + finalMsg.TargetName + "」，他可能離線了。",
+							Username: "🤖 系統機器人",
+							Content:  "找不到使用者「" + finalMsg.TargetName + "」，他可能離線了。",
 						}
 						clientMsg.Client.WriteJSON(errorMsg)
 					}

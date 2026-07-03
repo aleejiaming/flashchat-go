@@ -31,7 +31,7 @@ func (p *NormalProcessor) Process(msg Message) Message {
 type HelpProcessor struct{}
 
 func (p *HelpProcessor) Process(msg Message) Message {
-	msg.Name = "🤖 系統機器人"
+	msg.Username = "🤖 系統機器人"
 	msg.Content = "目前支援的指令：\n/weather [城市] - 查詢天氣\n/help - 顯示此選單"
 	msg.IsPrivate = true // 🌟 魔法：告訴經理(Hub)這是悄悄話！
 	return msg
@@ -48,7 +48,7 @@ func (p *WeatherProcessor) Process(msg Message) Message {
 		city = strings.TrimSpace(parts[1])
 	}
 
-	msg.Name = "🌤️ 天氣機器人"
+	msg.Username = "🌤️ 天氣機器人"
 
 	apiURL := "https://wttr.in/" + city + "?format=3"
 	resp, err := http.Get(apiURL)
@@ -88,7 +88,7 @@ func (p *PrivateMsgProcessor) Process(msg Message) Message {
 
 	// 如果客人打錯格式 (例如只打了 "/msg Mike")
 	if len(parts) < 3 {
-		msg.Name = "🤖 系統機器人"
+		msg.Username = "🤖 系統機器人"
 		msg.Content = "私訊格式錯誤！請輸入：/msg [對象名字] [你想說的話]"
 		msg.IsPrivate = true //只針對發話者 的選項
 		return msg
@@ -105,6 +105,9 @@ func (p *PrivateMsgProcessor) Process(msg Message) Message {
 	return msg
 }
 
+// 刪除原有的 type PingProcessor struct{} 與 Process 方法
+// 修改 GetProcessor 工廠函式，移除 /ping 的判斷分支
+
 // 3. 終極工廠：決定派誰出場
 func GetProcessor(content string) MessageProcessor {
 	if strings.HasPrefix(content, "/weather") {
@@ -113,6 +116,6 @@ func GetProcessor(content string) MessageProcessor {
 		return &HelpProcessor{}
 	} else if strings.HasPrefix(content, "/msg") { // 🌟 註冊私訊主廚！
 		return &PrivateMsgProcessor{}
-	}
+	} // 已刪除 /ping 分支
 	return &NormalProcessor{}
 }
