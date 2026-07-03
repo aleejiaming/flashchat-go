@@ -93,6 +93,9 @@ func main() {
 	// 設定路由 1：網頁靜態畫面櫃台
 	http.Handle("/", http.FileServer(http.Dir("./public")))
 
+	// 加入使用者驗證的路由 :/login
+	http.HandleFunc("/login", handler.LoginHandler)
+
 	// 設定路由 2：WebSocket 專屬櫃台 (交給我們剛剛聘請的服務生)
 	http.HandleFunc("/ws", wsHandler.HandleConnections)
 

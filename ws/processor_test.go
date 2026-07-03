@@ -49,7 +49,7 @@ func TestMessageProcessor(t *testing.T) {
 		{"Help 測試", Message{Content: "/help"}, true, "", "🤖 系統機器人"},
 		{"Msg 正確格式", Message{Content: "/msg Mike 打電動？"}, true, "Mike", ""},
 		{"Msg 錯誤格式", Message{Content: "/msg"}, true, "", "🤖 系統機器人"},
-		{"一般聊天", Message{Name: "Jack", Content: "大家好"}, false, "", "Jack"},
+		{"一般聊天", Message{Username: "Jack", Content: "大家好"}, false, "", "Jack"},
 	}
 
 	// 2. 執行測試邏輯
@@ -66,8 +66,8 @@ func TestMessageProcessor(t *testing.T) {
 			if tt.expectTarget != "" && result.TargetName != tt.expectTarget {
 				t.Errorf("收件人 期望 '%s', 實際 '%s'", tt.expectTarget, result.TargetName)
 			}
-			if tt.expectName != "" && result.Name != tt.expectName {
-				t.Errorf("發件人 期望 '%s', 實際 '%s'", tt.expectName, result.Name)
+			if tt.expectName != "" && result.Username != tt.expectName {
+				t.Errorf("發件人 期望 '%s', 實際 '%s'", tt.expectName, result.Username)
 			}
 		})
 	}
