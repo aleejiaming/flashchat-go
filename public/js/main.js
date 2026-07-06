@@ -1,25 +1,26 @@
 // public/js/main.js
-
-//這是前端程式的進入點，負責將 UI、Socket 與驗證邏輯串接起來，並綁定事件監聽器。
-import { DOM, initEmojiPicker } from './ui.js';
+import { DOM, initEmojiPicker, appendSidebarMessage } from './ui.js';
 import { connectWebSocket, sendMessage } from './socket.js';
-import { processLogin, getMyNickname } from './auth.js';
+import { registerUser, loginUser, guestLogin, getMyNickname } from './auth.js';
 
-// 初始化
+let currentAuthMode = 'login'; // 'login', 'register', 'guest'
+
 window.onload = () => {
     initEmojiPicker();
     setupEventListeners();
 };
 
-// 集中管理所有的事件綁定 (Event Listeners)
 function setupEventListeners() {
-    // 登入事件
-    DOM.joinBtn.addEventListener('click', handleLogin);
-    DOM.nicknameInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') handleLogin();
-    });
+    // === 頁籤切換邏輯 (加上 DOM. 前綴) ===
+    DOM.tabLogin.onclick = () => switchMode('login');
+    DOM.tabRegister.onclick = () => switchMode('register');
+    DOM.tabGuest.onclick = () => switchMode('guest');
 
-    // 發送訊息事件
+    // === 送出按鈕綁定 (加上 DOM. 前綴) ===
+    DOM.btnMemberSubmit.onclick = handleMemberSubmit;
+    DOM.btnGuestSubmit.onclick = handleGuestSubmit;
+
+    // 發送聊天訊息事件
     DOM.sendBtn.addEventListener('click', handleSend);
     DOM.messageInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') handleSend();
@@ -32,7 +33,6 @@ function setupEventListeners() {
         picker.style.display = picker.style.display === 'grid' ? 'none' : 'grid';
     });
 
-    // 點擊空白處關閉表情面板
     document.addEventListener('click', (e) => {
         if (e.target !== DOM.emojiPicker && e.target !== DOM.emojiBtn && !DOM.emojiPicker.contains(e.target)) {
             DOM.emojiPicker.style.display = 'none';
@@ -40,30 +40,85 @@ function setupEventListeners() {
     });
 }
 
-// 處理登入邏輯
-async function handleLogin() {
-    const rawName = DOM.nicknameInput.value;
-   // 等待 API 回傳 JWT Token
-   // const authData = await processLogin(rawName);
-    // 🌟 修復 2：加上 await 等待 API 回傳結果
-    const authData = await processLogin(rawName);
+// UI 頁籤切換功能
+function switchMode(mode) {
+    currentAuthMode = mode;
+    DOM.errorMsg.style.display = 'none'; // 切換時清空錯誤訊息
+    
+    // 按鈕顏色重置
+    [DOM.tabLogin, DOM.tabRegister, DOM.tabGuest].forEach(btn => {
+        btn.style.backgroundColor = 'var(--retro-dark)';
+        btn.style.color = 'var(--retro-green)';
+    });
 
-    // 防呆機制：如果登入 API 發生錯誤 (例如後端沒開)，就中斷執行
-    if (!authData) {
-        alert("登入失敗，請檢查系統連線");
+    if (mode === 'guest') {
+        DOM.tabGuest.style.backgroundColor = '#fff';
+        DOM.tabGuest.style.color = '#000';
+        DOM.formMember.style.display = 'none';
+        DOM.formGuest.style.display = 'block';
+    } else {
+        const activeTab = mode === 'login' ? DOM.tabLogin : DOM.tabRegister;
+        activeTab.style.backgroundColor = '#fff';
+        activeTab.style.color = '#000';
+        DOM.formMember.style.display = 'block';
+        DOM.formGuest.style.display = 'none';
+        DOM.btnMemberSubmit.innerText = mode === 'login' ? 'LOGIN' : 'REGISTER';
+    }
+}
+
+// 顯示錯誤訊息的小工具
+function showError(msg) {
+    DOM.errorMsg.innerText = msg;
+    DOM.errorMsg.style.display = 'block';
+}
+
+// 處理會員 (登入/註冊) 提交
+async function handleMemberSubmit() {
+    // 🌟 修正：從 DOM.inputUsername 取得資料
+    const user = DOM.inputUsername.value.trim();
+    const pass = DOM.inputPassword.value;
+
+    if (!user || !pass) {
+        showError("Username and Password are required!");
         return;
     }
 
-    // 🌟 修復 3：正確使用 authData 裡面的屬性
-    DOM.displayName.innerText = authData.finalName + ">";
+    try {
+        if (currentAuthMode === 'register') {
+            await registerUser(user, pass);
+            alert("註冊成功！系統將為您自動登入。");
+        }
+
+        const authData = await loginUser(user, pass);
+        enterChatRoom(authData);
+    } catch (error) {
+        showError(error.message);
+    }
+}
+
+// 處理遊客提交
+async function handleGuestSubmit() {
+    // 🌟 修正：從 DOM.inputNickname 取得資料
+    const nick = DOM.inputNickname.value.trim();
+    try {
+        const authData = await guestLogin(nick);
+        enterChatRoom(authData);
+    } catch (error) {
+        showError(error.message);
+    }
+}
+
+// 成功取得 Token 後，進入聊天室的通用邏輯
+function enterChatRoom(authData) {
+    DOM.displayName.innerText = authData.username + ">";
     DOM.loginModal.style.display = 'none';
     DOM.messageInput.focus();
     
-    // 🌟 修復 4：正確傳遞 token
+    // 啟動 WebSocket 連線
     connectWebSocket(authData.token);
 }
 
-// 處理發送訊息邏輯
+// 發送訊息邏輯
 function handleSend() {
     const text = DOM.messageInput.value.trim();
     if (text === "") return;

@@ -1,3 +1,4 @@
+/*
 package main
 
 import (
@@ -139,4 +140,78 @@ func main() {
 		slog.Error("伺服器強制關閉異常", "component", "server", "error", err.Error())
 	}
 	slog.Info("伺服器資源已釋放，安全結束程式", "component", "server")
+}
+*/
+
+package main
+
+import (
+	"context"
+	"errors"
+	"log/slog"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"flashchat-go/internal/bootstrap"
+	"flashchat-go/internal/logger"
+)
+
+func main() {
+	// 1. 系統環境初始化
+	logger.InitLogger()
+	slog.Info("FlashChat 系統啟動程序開始...", "component", "server")
+
+	// 2. 呼叫 Bootstrap 依賴注入中心，取得所有 Handlers
+	pgConnStr := "postgres://postgres:Ming741852@localhost:5432/flashchat?sslmode=disable"
+	redisAddr := "localhost:6379"
+
+	handlers, err := bootstrap.InitializeApp(pgConnStr, redisAddr)
+	if err != nil {
+		slog.Error("系統依賴裝配失敗，強制退出", "error", err.Error())
+		os.Exit(1)
+	}
+
+	// ==========================================
+	// 📍 路由綁定區 (Routing) - 一目了然
+	// ==========================================
+	http.Handle("/", http.FileServer(http.Dir("./public")))
+
+	http.HandleFunc("/register", handlers.Auth.RegisterHandler)
+	http.HandleFunc("/login", handlers.Auth.LoginHandler)
+	http.HandleFunc("/ws", handlers.WS.HandleConnections)
+	http.HandleFunc("/guest", handlers.Auth.GuestLoginHandler)
+
+	// ==========================================
+	// 🚀 伺服器啟動與優雅關機 (Lifecycle)
+	// ==========================================
+	port := "8080"
+	srv := &http.Server{
+		Addr:    ":" + port,
+		Handler: nil, // 使用預設 ServeMux
+	}
+
+	go func() {
+		slog.Info("HTTP/WS 伺服器已在背景啟動", "component", "server", "port", port)
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			slog.Error("伺服器崩潰", "component", "server", "error", err.Error())
+			os.Exit(1)
+		}
+	}()
+
+	// 監聽 OS 終止訊號 (Ctrl+C 或 Docker Stop)
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+	<-quit
+
+	slog.Warn("接收到中斷訊號，開始優雅關機 (Graceful Shutdown)...", "component", "server")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		slog.Error("伺服器強制關閉異常", "component", "server", "error", err.Error())
+	}
+	slog.Info("伺服器資源已安全釋放，Bye!", "component", "server")
 }
