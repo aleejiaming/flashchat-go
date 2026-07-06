@@ -11,7 +11,19 @@ export const DOM = {
     emojiBtn: document.getElementById('emoji-btn'),
     emojiPicker: document.getElementById('emoji-picker'),
     chatSidebar: document.getElementById('chat-sidebar'),
-    danmakuZone: document.getElementById('danmaku-zone')
+    danmakuZone: document.getElementById('danmaku-zone'),
+
+    tabLogin : document.getElementById('tab-login'),
+    tabRegister : document.getElementById('tab-register'),
+    tabGuest : document.getElementById('tab-guest'),
+    formMember : document.getElementById('form-member'),
+    formGuest : document.getElementById('form-guest'),
+    btnMemberSubmit : document.getElementById('submit-member-btn'),
+    btnGuestSubmit : document.getElementById('submit-guest-btn'),
+    inputUsername : document.getElementById('username-input'),
+    inputPassword : document.getElementById('password-input'),
+    inputNickname : document.getElementById('nickname-input'),
+    errorMsg : document.getElementById('auth-error-msg'),
 };
 
 // 渲染側邊欄訊息

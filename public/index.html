@@ -16,10 +16,29 @@
     <!-- 步驟 1：暱稱輸入彈窗 -->
     <div id="login-modal">
         <div class="modal-box">
-            <p>INITIALIZING SYSTEM...</p>
-            <p>ENTER NICKNAME <span class="blink-cursor">_</span></p>
-            <input type="text" id="nickname-input" placeholder="Guest" autocomplete="off" autofocus>
-            <button id="join-btn">CONNECT</button>
+            <p>FLASHCHAT_OS LOGIN SYSTEM</p>
+            
+            <div id="auth-tabs" style="margin-bottom: 20px;">
+                <button id="tab-login" style="background-color: #fff; color: #000;">LOGIN</button>
+                <button id="tab-register">REGISTER</button>
+                <button id="tab-guest">GUEST</button>
+            </div>
+
+            <p id="auth-error-msg" style="color: red; font-size: 20px; display: none;"></p>
+
+            <div id="form-member">
+                <p>USERNAME <span class="blink-cursor">_</span></p>
+                <input type="text" id="username-input" placeholder="Account" autocomplete="off">
+                <p>PASSWORD <span class="blink-cursor">_</span></p>
+                <input type="password" id="password-input" placeholder="********">
+                <button id="submit-member-btn" style="margin-top: 15px;">SUBMIT</button>
+            </div>
+
+            <div id="form-guest" style="display: none;">
+                <p>ENTER NICKNAME <span class="blink-cursor">_</span></p>
+                <input type="text" id="nickname-input" placeholder="Guest Name" autocomplete="off">
+                <button id="submit-guest-btn" style="margin-top: 15px;">CONNECT AS GUEST</button>
+            </div>
         </div>
     </div>
 
