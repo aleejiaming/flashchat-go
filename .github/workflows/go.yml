@@ -4,9 +4,10 @@ name: Go Test Pipeline
 # 觸發條件：什麼時候要叫機器人起床工作？
 on:
   push:
-    branches: [ "main" ] # 當有人直接 push 到 main 分支時
+    branches: [ "main", "master" ] # 兼容 main 與 master 分支
   pull_request:
-    branches: [ "main" ] # 當有人發起 PR 準備合併到 main 分支時
+    branches: [ "main", "master" ] # 當有人發起 PR 準備合併到 main 分支時有的人會取作master
+  pull_request:
 
 # 工作內容：
 jobs:
@@ -22,11 +23,16 @@ jobs:
     - name: 🐹 步驟 2 - 在雲端電腦上安裝 Go 語言環境
       uses: actions/setup-go@v5
       with:
-        go-version: '1.26.x' # 💡 請把這裡改成你電腦上安裝的 Go 版本 (例如 1.22)
+        go-version: '1.26.x' # 💡 請把這裡改成你電腦上安裝的 Go 版本 
 
-    - name: 📦 步驟 3 - 下載專案需要的套件 (例如 Redis, Gin)
-      run: go mod tidy
+    - name: 📦 步驟 3 - 下載專案需要的套件 (例如 Redis, Gin，嚴格下載模式)
+     # run: go mod tidy 業界在 CI 伺服器上通常會改用 go mod download。
+     # 因為 tidy 會去新增或刪除 go.mod 裡的紀錄，但 CI 是一台免洗的虛擬機，我們不希望它去修改我們的設定檔，只需要「單純把套件下載下來」就好。
+      run: go mod download
 
     - name: 🧪 步驟 4 - 執行所有的自動化測試考卷！
       # ./... 代表「從根目錄開始，幫我尋找所有的 _test.go 考卷並全部執行」
       run: go test -v ./...
+
+    - name: 🔨 步驟 5 - 檢查程式碼是否能順利編譯
+      run: go build -v ./...
