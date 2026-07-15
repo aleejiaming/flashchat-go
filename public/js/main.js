@@ -8,12 +8,24 @@ let currentAuthMode = 'login'; // 'login', 'register', 'guest'
 window.onload = () => {
     initEmojiPicker();
     setupEventListeners();
+
+ // 🌟 啟動時自動檢查登入狀態！
+    try {
+        const authData = await verifySession();
+        // 如果成功換發 Token，直接跳過登入視窗進入聊天室
+        enterChatRoom(authData);
+        appendSidebarMessage("SYSTEM", "歡迎回來！登入狀態已自動恢復。");
+    } catch (e) {
+        // 如果沒有 Cookie 或 Cookie 過期，就停留在原本的登入視窗
+        console.log("需要重新登入");
+    }
 };
+
 
 function setupEventListeners() {
     // === 頁籤切換邏輯 (加上 DOM. 前綴) ===
     DOM.tabLogin.onclick = () => switchMode('login');
-    DOM.tabRegister.onclick = () => switchMode('register');
+    DOM.tabRegister.onclick = () => switchMode('register');x``
     DOM.tabGuest.onclick = () => switchMode('guest');
 
     // === 送出按鈕綁定 (加上 DOM. 前綴) ===

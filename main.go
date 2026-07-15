@@ -156,7 +156,9 @@ import (
 	"time"
 
 	"flashchat-go/internal/bootstrap"
+	"flashchat-go/internal/database"
 	"flashchat-go/internal/logger"
+	"flashchat-go/repository"
 )
 
 func main() {
@@ -164,34 +166,32 @@ func main() {
 	logger.InitLogger()
 	slog.Info("FlashChat 系統啟動程序開始...", "component", "server")
 
-	// 2. 呼叫 Bootstrap 依賴注入中心，取得所有 Handlers
-	pgConnStr := "postgres://postgres:Ming741852@localhost:5432/flashchat?sslmode=disable"
-	redisAddr := "localhost:6379"
+	// 1. 基礎連線初始化
+	db, _ := database.NewPostgresDB("...") // 補上你的 DSN
+	msgRepo := repository.NewPGMessageRepository(db)
+	userRepo := repository.NewPGUserRepository(db)
+
+	//2.透過裝配線取得「路由器(mux)」
+	nux,_, err := bootstrap.InitializeApp(("...", "...", msgRepo, userRepo)
+	if err != nil {
+		slog.Error("系統裝配失敗", "error", err.Error())
+		os.Exit(1)
+	}
+
+	// 3. 將 mux 直接塞給伺服器，不需要再使用 http.HandleFunc
+	srv := &http.Server{
+		Addr:    ":8081", //實務上要讀取環境變數找到 PORT os.Getenv("PORT")
+		Handler: mux, // 這裡明確指定使用 bootstrap 回傳的路由器
+	}
 
 	handlers, err := bootstrap.InitializeApp(pgConnStr, redisAddr)
 	if err != nil {
 		slog.Error("系統依賴裝配失敗，強制退出", "error", err.Error())
 		os.Exit(1)
 	}
-
-	// ==========================================
-	// 📍 路由綁定區 (Routing) - 一目了然
-	// ==========================================
-	http.Handle("/", http.FileServer(http.Dir("./public")))
-
-	http.HandleFunc("/register", handlers.Auth.RegisterHandler)
-	http.HandleFunc("/login", handlers.Auth.LoginHandler)
-	http.HandleFunc("/ws", handlers.WS.HandleConnections)
-	http.HandleFunc("/guest", handlers.Auth.GuestLoginHandler)
-
 	// ==========================================
 	// 🚀 伺服器啟動與優雅關機 (Lifecycle)
 	// ==========================================
-	port := "8080"
-	srv := &http.Server{
-		Addr:    ":" + port,
-		Handler: nil, // 使用預設 ServeMux
-	}
 
 	go func() {
 		slog.Info("HTTP/WS 伺服器已在背景啟動", "component", "server", "port", port)
