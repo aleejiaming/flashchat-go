@@ -11,12 +11,12 @@ func TestJWTGenerationAndValidation(t *testing.T) {
 		testUser := "Mike_Testing"
 
 		// 1. 產生 Token
-		token, err := GenerateToken(testUser)
+		token, refreshtoken, err := GenerateToken(testUser)
 		if err != nil {
 			t.Fatalf("產生 Token 失敗: %v", err)
 		}
 
-		if token == "" {
+		if token == "" || refreshtoken == "" {
 			t.Error("預期拿到 token 字串，卻拿到空字串")
 		}
 
@@ -33,9 +33,10 @@ func TestJWTGenerationAndValidation(t *testing.T) {
 	})
 
 	// 測試情境 2：防禦偽造或篡改的 Token
+	// 可以新增  (Silent Refresh) 測試新Token的換發
 	t.Run("防禦篡改的Token", func(t *testing.T) {
 		testUser := "Hacker"
-		token, _ := GenerateToken(testUser)
+		token, _, _ := GenerateToken(testUser)
 
 		// 駭客嘗試破壞/竄改 token 的內容 (隨便把一段字串轉成大寫)
 		tamperedToken := strings.ToUpper(token)

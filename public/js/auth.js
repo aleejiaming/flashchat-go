@@ -31,6 +31,7 @@ export async function loginUser(username, password) {
     const data = await response.json();
     currentToken = data.token;
     currentNickname = data.username;
+    // 注意：Refresh Token 已經自動被瀏覽器存入 Cookie 了，我們不需要處理它
     return { token: currentToken, username: currentNickname };
 }
 
@@ -48,6 +49,28 @@ export async function guestLogin(nickname) {
     currentToken = data.token;
     currentNickname = data.username;
     return { token: currentToken, username: currentNickname };
+}
+
+// 🌟 新增：自動恢復連線 (Auto Login via Refresh Token)
+export async function verifySession() {
+    // 呼叫 /refresh，瀏覽器會自動帶上 HttpOnly Cookie
+    const response = await fetch('/refresh', { method: 'POST' });
+    
+    if (!response.ok) {
+        throw new Error("無效的登入狀態或憑證已過期");
+    }
+
+    const data = await response.json();
+    currentToken = data.token;
+    currentNickname = data.username;
+    return { token: currentToken, username: currentNickname };
+}
+
+// 🌟 新增：登出
+export async function logoutUser() {
+    await fetch('/logout', { method: 'POST' });
+    currentToken = "";
+    currentNickname = "Guest";
 }
 
 export function getMyNickname() { return currentNickname; }

@@ -183,11 +183,18 @@ func main() {
 	http.HandleFunc("/login", handlers.Auth.LoginHandler)
 	http.HandleFunc("/ws", handlers.WS.HandleConnections)
 	http.HandleFunc("/guest", handlers.Auth.GuestLoginHandler)
+	http.HandleFunc("/refresh", handlers.Auth.RefreshHandler)
+	http.HandleFunc("/refresh", handlers.Auth.LogoutHandler)
 
 	// ==========================================
 	// 🚀 伺服器啟動與優雅關機 (Lifecycle)
 	// ==========================================
-	port := "8080"
+	// 從作業系統的環境變數中尋找 "PORT"
+	port := os.Getenv("PORT")
+	if port == "" {
+		//如果找不到，就用預設 8081
+		port = "8081"
+	}
 	srv := &http.Server{
 		Addr:    ":" + port,
 		Handler: nil, // 使用預設 ServeMux

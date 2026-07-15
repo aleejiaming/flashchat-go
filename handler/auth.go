@@ -122,15 +122,24 @@ func (h *AuthHandler) LoginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 2. 帳密驗證成功，呼叫 auth 模組簽發 JWT Token
-	tokenString, err := auth.GenerateToken(user.Username)
+	// 取得雙 Token
+	tokenString, refreshToken, err := auth.GenerateToken(user.Username)
 	if err != nil {
 		slog.Error("Token 簽發失敗", "component", "auth", "error", err.Error())
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
+	// 🛡️ 把 Refresh Token 塞進 HttpOnly Cookie (前端 JS 看不到，免疫 XSS 攻擊)
+	http.SetCookie(w, &http.Cookie{
+		Name:     "refresh_token",
+		Value:    refreshToken,
+		HttpOnly: true,  //禁止 JS 讀取
+		Secure:   false, //實際上線(HTTPS)時必須改為tru
+		Path:     "/",
+		MaxAge:   7 * 24 * 3600, //7天過期
+	})
 
-	// 3. 回傳 JSON 格式的 Token 給前端
+	// 把短效 Access Token 放在 JSON 回傳給前端
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
 		"token":    tokenString,
@@ -138,8 +147,62 @@ func (h *AuthHandler) LoginHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// 新增：無聲換發 Token 邏輯 (Silent Refresh)
+func (h *AuthHandler) RefreshHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	//1.從請求中自動尋找名為 refresh_token 的 Cookie
+	cookie, err := r.Cookie("refresh_token")
+	if err != nil {
+		http.Error(w, "缺少登入憑證", http.StatusUnauthorized)
+		return
+	}
+	//2.驗證 Refresh Token 是否合法且未過期
+	username, err := auth.ValidateRefreshToken(cookie.Value)
+	if err != nil {
+		http.Error(w, "憑證已過期，請重新登入", http.StatusUnauthorized)
+		return
+	}
+	//3.驗證成功，重新核發一組全新的雙 Token
+	newAccessToken, newRefreshToken, err := auth.GenerateToken(username)
+	if err != nil {
+		http.Error(w, "系統錯誤", http.StatusInternalServerError)
+		return
+	}
+	//  4.更新 Cookie
+	http.SetCookie(w, &http.Cookie{
+		Name:     "refresh_token",
+		Value:    newRefreshToken,
+		HttpOnly: true,
+		Secure:   false, //正式上線要改為 ture
+		Path:     "/",
+		MaxAge:   7 * 24 * 3600,
+	})
+	// 5. 將新的短效 Token 回傳
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"token":    newAccessToken,
+		"username": username,
+	})
+}
+
+// 🌟 新增：登出邏輯 (清除 Cookie)
+func (h *AuthHandler) LogoutHandler(w http.ResponseWriter, r *http.Request) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     "refresh_token",
+		Value:    "",
+		HttpOnly: true,
+		Secure:   false,
+		Path:     "/",
+		MaxAge:   -1, // 設定為負數，強制瀏覽器立刻刪除 Cookie
+	})
+	w.WriteHeader(http.StatusOK)
+}
+
 // ==========================================
-// 4. 遊客登入邏輯 (Guest Login)
+// 遊客登入邏輯 (Guest Login)
 // ==========================================
 func (h *AuthHandler) GuestLoginHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -162,8 +225,9 @@ func (h *AuthHandler) GuestLoginHandler(w http.ResponseWriter, r *http.Request) 
 	//🛡️ 商業邏輯：為了區分正式會員與遊客，強制加上 [遊客] 標籤
 	finalName := "[遊客]" + nickname
 
-	// 直接發放 JWT
-	tokenString, err := auth.GenerateToken(finalName)
+	//// 直接發放 JWT
+	// 遊客只給予一組普通的 Token
+	accessToken, _, err := auth.GenerateToken(finalName)
 	if err != nil {
 		http.Error(w, "Token 發放失敗", http.StatusInternalServerError)
 		return
@@ -171,7 +235,7 @@ func (h *AuthHandler) GuestLoginHandler(w http.ResponseWriter, r *http.Request) 
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
-		"token":    tokenString,
+		"token":    accessToken,
 		"username": finalName,
 	})
 }

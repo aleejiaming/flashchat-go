@@ -6,6 +6,7 @@ import (
 	"flashchat-go/repository"
 	"flashchat-go/ws"
 	"log/slog"
+	"net/http" // 確保有 import http
 )
 
 // AppHandlers 打包了系統中所有的控制器 (對外服務生)
@@ -54,6 +55,11 @@ func InitializeApp(pgConnStr, redisAddr string) (*AppHandlers, error) {
 	// 4. 將完成裝配的資源注入控制器 (Handlers)
 	authHandler := handler.NewAuthHandler(userRepo)
 	wsHandler := handler.NewWSHandler(hub)
+
+	// 🌟 註冊剛剛新增的路由：在這裡將 HTTP Request 對應到處理器
+	// (記得在 main.go 中也要透過 handlers.Auth 綁定這兩個路由)
+	http.HandleFunc("/refresh", authHandler.RefreshHandler)
+	http.HandleFunc("/logout", authHandler.LogoutHandler)
 
 	// 5. 將所有對外窗口打包回傳
 	return &AppHandlers{
