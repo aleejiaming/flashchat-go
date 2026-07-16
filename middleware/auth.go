@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"flashchat-go/internal/auth" // 替換成您實際的專案模組名稱
+	"flashchat-go/internal/auth"
 )
 
 // AuthMiddleware 是一個中介軟體，負責攔截請求並驗證 JWT

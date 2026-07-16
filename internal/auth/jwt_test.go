@@ -11,7 +11,7 @@ func TestJWTGenerationAndValidation(t *testing.T) {
 		testUser := "Mike_Testing"
 
 		// 1. 產生 Token
-		token, err := GenerateToken(testUser)
+		token, _, err := GenerateToken(testUser)
 		if err != nil {
 			t.Fatalf("產生 Token 失敗: %v", err)
 		}
@@ -35,7 +35,7 @@ func TestJWTGenerationAndValidation(t *testing.T) {
 	// 測試情境 2：防禦偽造或篡改的 Token
 	t.Run("防禦篡改的Token", func(t *testing.T) {
 		testUser := "Hacker"
-		token, _ := GenerateToken(testUser)
+		token, _, _ := GenerateToken(testUser)
 
 		// 駭客嘗試破壞/竄改 token 的內容 (隨便把一段字串轉成大寫)
 		tamperedToken := strings.ToUpper(token)
@@ -57,6 +57,52 @@ func TestJWTGenerationAndValidation(t *testing.T) {
 
 		if err == nil {
 			t.Error("系統被攻破了！亂碼 Token 竟然驗證成功")
+		}
+	})
+}
+
+func TestRefreshTokenFlow(t *testing.T) {
+	// 測試情境 1：Refresh Token 的正常核發與驗證
+	t.Run("Refresh Token 正常運作", func(t *testing.T) {
+		username := "Mike_Refresh_Test"
+
+		//產生一組雙 Token
+		_, refreshToken, err := GenerateToken(username)
+		if err != nil {
+			t.Fatalf("產生 Tokens 失敗: %v", err)
+		}
+		//驗證 Refresh Token
+		parsedUser, err := ValidateRefreshToken(refreshToken)
+		if err != nil {
+			t.Fatalf("驗證 Refresh Token 失敗: %v", err)
+		}
+		if parsedUser != username {
+			t.Errorf("Refresh Token 解碼名稱錯誤：期望 %s，得到 %s", username, parsedUser)
+		}
+	})
+	// 測試情境 2：【重要】防禦交叉污染 (Access vs Refresh)
+	// 確保 Access Token 不能拿去通過 Refresh Token 的驗證器
+	t.Run("防禦 Access Token 混入 Refresh 流程", func(t *testing.T) {
+		username := "Mike_Cross_Test"
+		acessToken, _, _ := GenerateToken(username)
+
+		// 嘗試用 Access Token 去跑 ValidateRefreshToken
+		_, err := ValidateRefreshToken(acessToken)
+
+		// 預期失敗：因為 RefreshToken 通常會檢查不同的 secret key 或 claim
+		if err == nil {
+			t.Error("嚴重安全性風險！Access Token 竟然通過了 Refresh Token 的驗證器")
+		}
+	})
+
+	// 測試情境 3：Refresh Token 被篡改
+	t.Run("Refresh Token 被篡改", func(t *testing.T) {
+		_, refreshToken, _ := GenerateToken("Hacker")
+		// 隨意修改一下字串
+		tampered := refreshToken + "hacked"
+		_, err := ValidateRefreshToken(tampered)
+		if err != nil {
+			t.Error("篡改過的 Refresh Token 竟然驗證成功")
 		}
 	})
 }

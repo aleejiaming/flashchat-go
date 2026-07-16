@@ -1,0 +1,19 @@
+# 專案私密設定 (這是最重要的!)
+.env
+
+# 編譯產生的執行檔
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+main
+
+# IDE 設定檔 (VS Code)
+.vscode/
+.idea/
+
+# Go 的相關快取
+vendor/
+*.test
+*.out
