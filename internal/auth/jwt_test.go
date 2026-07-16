@@ -101,7 +101,7 @@ func TestRefreshTokenFlow(t *testing.T) {
 		// 隨意修改一下字串
 		tampered := refreshToken + "hacked"
 		_, err := ValidateRefreshToken(tampered)
-		if err != nil {
+		if err == nil {
 			t.Error("篡改過的 Refresh Token 竟然驗證成功")
 		}
 	})
