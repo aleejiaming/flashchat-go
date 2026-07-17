@@ -2,10 +2,10 @@ package middleware
 
 import (
 	"context"
+	"flashchat-go/internal/auth"
+	"log/slog"
 	"net/http"
 	"strings"
-
-	"flashchat-go/internal/auth"
 )
 
 // 定義私有型別 contextKey，專門用於此 Package 的 Context，避免其
@@ -17,24 +17,34 @@ const UserContextKey contextKey = "username"
 // AuthMiddleware 是一個中介軟體，負責攔截請求並驗證 JWT
 func AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// 宣告一個空字串準備接收 Token
+		var tokenString string
+
 		// 1. 從 HTTP 標頭 (Header) 中取出 Authorization 欄位
 		// 格式通常為： "Bearer xxxxx.yyyyy.zzzzz"
 		authHeader := r.Header.Get("Authorization")
-		if authHeader == "" {
-			http.Error(w, "缺少 Authorization 標頭", http.StatusUnauthorized)
+		if authHeader != "" {
+			parts := strings.SplitN(authHeader, " ", 2)
+			if len(parts) == 2 && parts[0] == "Bearer" {
+				tokenString = parts[1] // 成功從 Header 拿到 Token
+			}
+		}
+		// 如果 Header 裡面空空如也，那可能是 WebSocket 連線！
+		// 我們改去 URL 的查詢字串 (Query String) 裡面撈撈看有沒有 "?token=..."
+		if tokenString == "" {
+			tokenString = r.URL.Query().Get("token")
+		}
+		// 如果兩邊都找不到，直接把這個請求踢回前端 (回傳 401)
+		if tokenString == "" {
+			slog.Warn("【除錯】未能在 URL Query 中撈到 Token")
+			http.Error(w, "缺少驗證憑證", http.StatusUnauthorized)
 			return
 		}
-		// 2. 檢查字串是否以 "Bearer " 開頭，並把 Token 切割出來
-		parts := strings.SplitN(authHeader, " ", 2)
-		if len(parts) != 2 || parts[0] != "Bearer" {
-			http.Error(w, "Authhorization 格式錯誤 (必須是Bearer <token>)", http.StatusUnauthorized)
-			return
-		}
-		tokenString := parts[1]
 
 		// 3. 呼叫 auth 模組來驗證 Token，實際的 JWT 解析邏輯：驗證簽章、過期時間，並提取 payload
 		username, err := auth.ValidateToken(tokenString)
 		if err != nil {
+			slog.Error("【除錯】JWT 驗證失敗", "error_detail", err.Error())
 			// 如果過期或被篡改，拒絕請求
 			http.Error(w, "Token 無效或已過期", http.StatusUnauthorized)
 			return

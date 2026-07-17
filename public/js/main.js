@@ -5,7 +5,7 @@ import { registerUser, loginUser, guestLogin, getMyNickname } from './auth.js';
 
 let currentAuthMode = 'login'; // 'login', 'register', 'guest'
 
-window.onload = () => {
+window.onload = async () => {
     initEmojiPicker();
     setupEventListeners();
 
@@ -25,7 +25,7 @@ window.onload = () => {
 function setupEventListeners() {
     // === 頁籤切換邏輯 (加上 DOM. 前綴) ===
     DOM.tabLogin.onclick = () => switchMode('login');
-    DOM.tabRegister.onclick = () => switchMode('register');x``
+    DOM.tabRegister.onclick = () => switchMode('register');
     DOM.tabGuest.onclick = () => switchMode('guest');
 
     // === 送出按鈕綁定 (加上 DOM. 前綴) ===
