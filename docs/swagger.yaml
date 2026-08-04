@@ -1,0 +1,91 @@
+definitions:
+  handler.AuthRequest:
+    properties:
+      password:
+        type: string
+      username:
+        type: string
+    type: object
+  handler.LoginResponse:
+    properties:
+      token:
+        example: eyJhbGciOiJIUzI1Ni...
+        type: string
+      username:
+        example: Mike
+        type: string
+    type: object
+  handler.MessageResponse:
+    properties:
+      message:
+        example: 註冊成功
+        type: string
+    type: object
+info:
+  contact: {}
+paths:
+  /login:
+    post:
+      consumes:
+      - application/json
+      description: 驗證帳號密碼，成功後回傳 JWT Token
+      parameters:
+      - description: 帳號與密碼
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.AuthRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 登入成功，回傳 Token
+          schema:
+            $ref: '#/definitions/handler.LoginResponse'
+        "401":
+          description: 帳號或密碼錯誤
+          schema:
+            type: string
+      summary: 會員登入
+      tags:
+      - Authentication
+  /register:
+    post:
+      consumes:
+      - application/json
+      description: 註冊新會員，成功後回傳成功訊息
+      parameters:
+      - description: 註冊的帳號與密碼
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.AuthRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: 註冊成功，資源已建立
+          schema:
+            $ref: '#/definitions/handler.MessageResponse'
+        "400":
+          description: Invalid JSON Request 或 帳號密碼不得為空
+          schema:
+            type: string
+        "405":
+          description: Method Not Allowed
+          schema:
+            type: string
+        "409":
+          description: Conflict(帳號已被註冊)
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error(加密失敗、資料庫異常)
+          schema:
+            type: string
+      summary: 會員註冊
+      tags:
+      - Authentication
+swagger: "2.0"

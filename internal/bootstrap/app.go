@@ -8,6 +8,13 @@ import (
 	"flashchat-go/ws"
 	"log/slog"
 	"net/http"
+
+	// 🌟 匯入 http-swagger 套件
+	httpSwagger "github.com/swaggo/http-swagger"
+
+	// 🌟 必須匯入剛剛 swag init 幫你產生的 docs 資料夾！
+	// 前面的底線 "_" 代表我們只需要執行它的 init()，不直接呼叫裡面的函式
+	_ "flashchat-go/docs"
 )
 
 // AppHandlers 打包了系統中所有的控制器 (對外服務生)
@@ -63,6 +70,11 @@ func InitializeApp(pgConnStr, redisAddr string, msgRepo repository.MessageReposi
 	// 使用 middleware.AuthMiddleware 把原本的 Handler 「包」起來
 	// 需要驗證的 WebSocket 路由
 	mux.HandleFunc("GET /ws", middleware.AuthMiddleware(wsHandler.HandleConnections))
+
+	// 這樣當你訪問 /swagger/ 時，就會吐出 Swagger UI 網頁
+	mux.HandleFunc("/swagger/", httpSwagger.Handler(
+		httpSwagger.URL("http://localhost:8081/swagger/doc.json"),
+	))
 
 	// 5. 將所有對外窗口打包回傳
 	return mux, &AppHandlers{

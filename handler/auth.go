@@ -32,9 +32,33 @@ type AuthRequest struct {
 	Password string `json:"password"`
 }
 
+// 定義 swagger 回應 API 格式
+type LoginResponse struct {
+	Token    string `json:"token" example:"eyJhbGciOiJIUzI1Ni..."`
+	Username string `json:"username" example:"Mike"`
+}
+
+type MessageResponse struct {
+	Message string `json:"message" example:"註冊成功"`
+}
+
 // ==========================================
 // 2. 註冊邏輯 (Register)
 // ==========================================
+
+// RegisterHandler 處理會員註冊
+// @Summary 會員註冊
+// @Description 註冊新會員，成功後回傳成功訊息
+// @Tags Authentication
+// @Accept json
+// @Produce json
+// @Param request body AuthRequest true "註冊的帳號與密碼"
+// @Success 201 {object} MessageResponse "註冊成功，資源已建立"
+// @Failure 400 {string} string "Invalid JSON Request 或 帳號密碼不得為空"
+// @Failure 405 {string} string "Method Not Allowed"
+// @Failure 409 {string} string "Conflict(帳號已被註冊)"
+// @Failure 500 {string} string "Internal Server Error(加密失敗、資料庫異常)""
+// @Router /register [post]
 func (h *AuthHandler) RegisterHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
@@ -79,13 +103,26 @@ func (h *AuthHandler) RegisterHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// 回傳 201 Created 代表資源成功建立
+	// 🌟 嚴謹的寫法：真正應用 MessageResponse 結構體
+	w.Header().Set("Content-Type", "application/json") //告訴前端這是一包 JSON
 	w.WriteHeader(http.StatusCreated)
-	w.Write([]byte(`{"message": "註冊成功"}`))
+
+	resp := MessageResponse{
+		Message: "註冊成功",
+	}
+	json.NewEncoder(w).Encode(resp) // 透過模具打包回傳
 }
 
-// ==========================================
-// 3. 登入邏輯 (Login) - 升級為真實資料庫驗證
-// ==========================================
+// LoginHandler 處理會員登入
+// @Summary 會員登入
+// @Description 驗證帳號密碼，成功後回傳 JWT Token
+// @Tags Authentication
+// @Accept json
+// @Produce json
+// @Param request body AuthRequest true "帳號與密碼"
+// @Success 200 {object} LoginResponse "登入成功，回傳 Token"
+// @Failure 401 {string} string "帳號或密碼錯誤"
+// @Router /login [post]
 func (h *AuthHandler) LoginHandler(w http.ResponseWriter, r *http.Request) {
 	//採用守衛子句（Guard Clause）與早期返回（Early Return）模式
 	//這是一種軟體工程中的防禦性程式設計（Defensive Programming)
@@ -139,12 +176,23 @@ func (h *AuthHandler) LoginHandler(w http.ResponseWriter, r *http.Request) {
 		MaxAge:   7 * 24 * 3600, //7天過期
 	})
 
+	/*
+			把短效 Access Token 放在 JSON 回傳給前端
+		    w.Header().Set("Content-Type", "application/json")
+		    json.NewEncoder(w).Encode(map[string]string{
+		        "token":    tokenString,
+		        "username": user.Username,
+		    })
+		}
+	*/
+
 	// 把短效 Access Token 放在 JSON 回傳給前端
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
-		"token":    tokenString,
-		"username": user.Username,
-	})
+	resp := LoginResponse{
+		Token:    tokenString,
+		Username: user.Username,
+	}
+	json.NewEncoder(w).Encode(resp)
 }
 
 // 新增：無聲換發 Token 邏輯 (Silent Refresh)
