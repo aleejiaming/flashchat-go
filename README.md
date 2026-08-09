@@ -71,9 +71,14 @@ docker-compose up -d
 
 # 3. 啟動 Go 伺服器
 go run main.go
-
 ```
-mermaid
+
+
+## 循序圖說明 
+說明 Message 如何抓取使用者訊息，隨後透過 Hub.go 廣播給正在運作的伺服器。
+
+```mermaid
+
 sequenceDiagram
     autonumber
     actor Alice as 使用者 Alice (Client)
@@ -108,4 +113,6 @@ sequenceDiagram
     activate SrvB
     SrvB->>Bob: 5. 透過 WriteJSON 派發訊息給連線的 Bob
     deactivate SrvB
-    ```
+```
+
+
