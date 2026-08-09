@@ -71,3 +71,41 @@ docker-compose up -d
 
 # 3. 啟動 Go 伺服器
 go run main.go
+
+```
+mermaid
+sequenceDiagram
+    autonumber
+    actor Alice as 使用者 Alice (Client)
+    participant SrvA as Server A (Hub)
+    participant Redis as Redis (Pub/Sub)
+    participant SrvB as Server B (Hub)
+    actor Bob as 使用者 Bob (Client)
+
+    Note over SrvA, SrvB: 伺服器啟動時，皆已執行 SUBSCRIBE chat_channel
+
+    Alice->>SrvA: 1. 透過 WebSocket 傳送訊息 (JSON)
+    
+    activate SrvA
+    SrvA->>SrvA: 2. 訊息進入 h.Broadcast Channel
+    
+    par 資料持久化
+        SrvA->>SrvA: 3a. 寫入 SaveQueue (背景存入 DB/Redis)
+    and 廣播
+        SrvA->>Redis: 3b. PUBLISH chat_channel (將訊息發布至 Redis)
+    end
+    deactivate SrvA
+
+    activate Redis
+    Redis-->>SrvA: 4. 推播訊息 (因為 Server A 有訂閱)
+    Redis-->>SrvB: 4. 推播訊息 (因為 Server B 有訂閱)
+    deactivate Redis
+
+    activate SrvA
+    SrvA->>Alice: 5. 透過 WriteJSON 派發訊息給連線的 Alice
+    deactivate SrvA
+
+    activate SrvB
+    SrvB->>Bob: 5. 透過 WriteJSON 派發訊息給連線的 Bob
+    deactivate SrvB
+    ```
