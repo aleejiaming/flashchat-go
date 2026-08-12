@@ -18,6 +18,12 @@ import (
 	"flashchat-go/repository"
 )
 
+// @title FlashChat OS API
+// @version 1.0
+// @description 這是 FlashChat 復古終端機聊天室的後端 API 文件。
+// @host localhost:8081
+// @BasePath /
+
 func main() {
 	// 系統環境初始化
 	logger.InitLogger()

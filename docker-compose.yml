@@ -12,7 +12,7 @@ services:
       POSTGRES_DB: flashchat
     ports:
       - "5432:5432" # 開放 5432 讓 Go 可以連進來
-        # 電腦重開機時，幫我自動啟動
+    restart: always    # 電腦重開機時，幫我自動啟動
     volumes:
       - pgdata:/var/lib/postgresql/data # 掛載硬碟，確保資料庫重啟時資料不會不見！
 
@@ -21,6 +21,24 @@ services:
     container_name: flashchat_redis
     ports:
       - "6379:6379"  # 把貨櫃裡的 6379 洞口，接上你電腦的 6379 洞
+    command: redis-server --appenddonly yes # 【新增】開啟 AOF 持久化，重啟時資料不遺失
+    restart: always # 【新增】同樣設定自動重啟，保持環境穩定
+    volumes:
+      - redis_data:/data # 【新增】將 Redis 的資料寫入虛擬硬碟
 
+  nginx:
+    image: nginx:alpine
+    container_name: flashchat_nginx
+    ports:
+      - "8080:80" #把本機的 8080 綁定到 Nginx 的 80 (避免和本機其他服務衝突)
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro #把本機的 nginx.conf 掛載到貨櫃裡的 /etc/nginx/nginx.conf
+    # 告訴 Nginx 這個容器可以解析 host.docker.internal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: always
+     # docker-compose up -d nginx 指令是讓 Docker 把 Nginx 啟動起來：
 volumes:
   pgdata:
+  redis_data: # 【新增】宣告 Redis 專用的虛擬硬碟
+
