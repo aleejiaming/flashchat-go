@@ -51,6 +51,11 @@ func (h *Hub) Run() {
 	slog.Info("📡 [Hub] 廣播中心管理員已就緒", "component", "hub")
 	ctx := context.Background()
 
+	// 🌟 [新增訂閱] 經理一上班，就立刻打開對講機，訂閱全服廣播頻道
+	pubsub := h.RedisClient.Subscribe(ctx, "chat_channel")
+	defer pubsub.Close()
+	redisChannel := pubsub.Channel() // 拿到接收訊息的專用通道
+
 	for {
 		select {
 		case client := <-h.Register:
@@ -76,6 +81,35 @@ func (h *Hub) Run() {
 					client.WriteJSON(oldMsg)
 				}
 			}
+		// ==========================================
+		// 🌟 [新增接收] 處理從 Redis 廣播頻道收到的訊息
+		// ==========================================
+		case redisMsg := <-redisChannel:
+
+			//將 Redis 傳來的字串(Payload)，解碼轉回 Message 結構
+			var finalMsg Message
+			err := json.Unmarshal([]byte(redisMsg.Payload), &finalMsg)
+			if err != nil {
+				// 確認是不是解碼失敗了
+				slog.Error("❌ [PubSub] JSON 解碼失敗", "error", err)
+				continue // 解碼失敗就跳過這次，不要讓伺服器崩潰
+			}
+
+			//【除錯】廣播給「目前這台伺服器」上所有的客人
+			successCount := 0
+			for client := range h.Clients {
+				err := client.WriteJSON(finalMsg)
+				if err != nil {
+					slog.Warn("⚠️ 無法發送訊息給客人，準備強制下線", "error", err)
+					client.Close()
+					delete(h.Clients, client)
+				} else {
+					successCount++
+				}
+			}
+			// 🕵️ 加上第三道監視器：確認到底派發給了幾個客人
+			slog.Info("✅ [PubSub] 訊息派發完成", "success_count", successCount)
+
 		// ------------------------------------------
 		// 🔴 客人下線
 		// ------------------------------------------
@@ -94,6 +128,7 @@ func (h *Hub) Run() {
 			// 找主廚加工訊息
 			processor := GetProcessor(clientMsg.Msg.Content)
 			finalMsg := processor.Process(clientMsg.Msg)
+
 			// 🔒 模式 A/B：私訊或系統悄悄話 (注意：私訊【不會】存入 Redis 歷史紀錄)
 			if finalMsg.IsPrivate {
 				if finalMsg.TargetName != "" {
@@ -120,7 +155,22 @@ func (h *Hub) Run() {
 
 				// 🌟 1. 取得現在的時間戳
 				now := time.Now().Unix() //取得現在的時間
-				msgBytes, _ := json.Marshal(finalMsg)
+				msgBytes, err := json.Marshal(finalMsg)
+				//測試 訊息是否被成功訂閱(sumblimt)
+				if err != nil {
+					slog.Error("訊息轉 JSON 失敗", "error", err)
+					continue
+				}
+				// 🌟 2. 關鍵動作：將訊息 Publish 到 Redis 的 "chat_channel" 頻道
+				// 請確認這裡的頻道名稱 ("chat_channel") 和你 Subscribe 的頻道名稱一模一樣！
+				err = h.RedisClient.Publish(context.Background(), "chat_channel", msgBytes).Err()
+				if err != nil {
+					slog.Error("❌ [PubSub] 發布訊息到 Redis 失敗", "error", err)
+				} else {
+					// 🕵️ 加入監視器：確認 Go 有沒有成功發布！
+					slog.Info("📤 [PubSub] 成功將訊息發布至 Redis 頻道")
+				}
+
 				// 🌟 2. 存入 Redis ZSET (分數 = 時間戳)、以及對話紀錄
 				h.RedisClient.ZAdd(ctx, "chat_history", &redis.Z{
 					Score:  float64(now),
@@ -130,17 +180,13 @@ func (h *Hub) Run() {
 				sevenDaysAgo := now - 604800
 				h.RedisClient.ZRemRangeByScore(ctx, "chat_history", "-inf", fmt.Sprintf("%d", sevenDaysAgo))
 
-				// 🌟 補上這行！把訊息丟進排隊箱，讓 PostgreSQL 打工人去存檔
+				// 🌟 把訊息丟進排隊箱，讓 PostgreSQL 打工人去存檔
 				h.SaveQueue <- finalMsg
 
-				// 最後，照常廣播給所有人
-				for client := range h.Clients {
-					err := client.WriteJSON(finalMsg)
-					if err != nil {
-						client.Close()
-						delete(h.Clients, client)
-					}
-				}
+				// 🚀 關鍵改變：我們不再自己跑迴圈發送給 h.Clients 了！
+				// 而是對著 Redis 廣播頻道大喊 (Publish)
+				h.RedisClient.Publish(ctx, "caht_channel", string(msgBytes))
+
 			}
 		}
 	}

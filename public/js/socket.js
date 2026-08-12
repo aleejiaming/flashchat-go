@@ -6,8 +6,15 @@ let socket = null;
 let heartbeatTimer = null;
 
 export function connectWebSocket(token) {
-    // 實作帶有 Token 的連線
-    const wsUrl = `ws://${window.location.host}/ws?token=${token}`;
+    //🌟 1. 自動判斷當前網頁是不是 https，如果是，就切換成 wss 加密通道
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+
+    // 🌟 2. 組合出最終的網址 (自動適應 localhost 或未來的正式網域)
+    const wsUrl = `${protocol}//${window.location.host}/ws?token=${token}`;
+    
+    // 實作帶有 Token 的連線 (不考慮上機到正式環境的情況，因為正式環境會有 HTTPS)
+    //const wsUrl = `ws://${window.location.host}/ws?token=${token}`;
+    
     socket = new WebSocket(wsUrl);
 
     socket.onopen = () => {
