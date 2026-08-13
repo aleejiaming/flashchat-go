@@ -20,53 +20,47 @@ sequenceDiagram
     actor UserB as 使用者 B
 
     %% --- 啟動與訂閱階段 ---
-    rect rgb(240, 248, 255)
-        Note right of SrvA: 伺服器啟動初始化
-        SrvA->>Redis: 啟動時自動 SUBSCRIBE chat_channel
-        SrvB->>Redis: 啟動時自動 SUBSCRIBE chat_channel
-        SrvA->>DB: 建立資料庫連線池 (Connection Pool)
-        SrvB->>DB: 建立資料庫連線池 (Connection Pool)
-    end
+    Note right of SrvA: 伺服器啟動初始化
+    SrvA->>Redis: 啟動時自動 SUBSCRIBE chat_channel
+    SrvB->>Redis: 啟動時自動 SUBSCRIBE chat_channel
+    SrvA->>DB: 建立資料庫連線池 (Connection Pool)
+    SrvB->>DB: 建立資料庫連線池 (Connection Pool)
 
     %% --- 連線階段 ---
-    rect rgb(255, 245, 238)
-        Note right of UserA: WebSocket 連線建立 (負載平衡)
-        UserA->>Nginx: HTTP GET /ws (要求升級 WebSocket)
-        Nginx->>SrvA: 轉發並升級連線 (分配給 Server A)
-        
-        UserB->>Nginx: HTTP GET /ws (要求升級 WebSocket)
-        Nginx->>SrvB: 轉發並升級連線 (分配給 Server B)
-    end
+    Note right of UserA: WebSocket 連線建立 (負載平衡)
+    UserA->>Nginx: HTTP GET /ws (要求升級 WebSocket)
+    Nginx->>SrvA: 轉發並升級連線 (分配給 Server A)
+    
+    UserB->>Nginx: HTTP GET /ws (要求升級 WebSocket)
+    Nginx->>SrvB: 轉發並升級連線 (分配給 Server B)
 
     %% --- 訊息傳遞階段 ---
-    rect rgb(240, 255, 240)
-        Note right of UserA: 使用者發送訊息與跨服廣播
-        UserA->>SrvA: 透過 WebSocket 發送 JSON 訊息
-        
-        activate SrvA
-        SrvA->>SrvA: 訊息進入 Hub 的 Broadcast Channel
-        
-        par 背景非同步存檔
-            SrvA->>SrvA: 丟入 SaveQueue
-            SrvA-)DB: Worker 背景執行 INSERT (不阻塞主流程)
-        and 觸發發布機制
-            SrvA->>Redis: 執行 PUBLISH chat_channel
-        end
-        deactivate SrvA
-
-        activate Redis
-        Redis-->>SrvA: 推播訊息至 Server A
-        Redis-->>SrvB: 推播訊息至 Server B
-        deactivate Redis
-
-        activate SrvA
-        SrvA->>UserA: Server A 派發訊息給畫面更新
-        deactivate SrvA
-
-        activate SrvB
-        SrvB->>UserB: Server B 派發訊息給畫面更新
-        deactivate SrvB
+    Note right of UserA: 使用者發送訊息與跨服廣播
+    UserA->>SrvA: 透過 WebSocket 發送 JSON 訊息
+    
+    activate SrvA
+    SrvA->>SrvA: 訊息進入 Hub 的 Broadcast Channel
+    
+    par 背景非同步存檔
+        SrvA->>SrvA: 丟入 SaveQueue
+        SrvA-)DB: Worker 背景執行 INSERT (不阻塞主流程)
+    and 觸發發布機制
+        SrvA->>Redis: 執行 PUBLISH chat_channel
     end
+    deactivate SrvA
+
+    activate Redis
+    Redis-->>SrvA: 推播訊息至 Server A
+    Redis-->>SrvB: 推播訊息至 Server B
+    deactivate Redis
+
+    activate SrvA
+    SrvA->>UserA: Server A 派發訊息給畫面更新
+    deactivate SrvA
+
+    activate SrvB
+    SrvB->>UserB: Server B 派發訊息給畫面更新
+    deactivate SrvB
 ```
 
 ---
