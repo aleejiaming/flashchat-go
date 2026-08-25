@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"flashchat-go/internal/auth"
 	"flashchat-go/repository"
 
+	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -18,11 +20,13 @@ import (
 
 type AuthHandler struct {
 	UserRepo repository.UserRepository
+	km       *auth.KeyManager
 }
 
-func NewAuthHandler(repo repository.UserRepository) *AuthHandler {
+func NewAuthHandler(repo repository.UserRepository, km *auth.KeyManager) *AuthHandler {
 	return &AuthHandler{
 		UserRepo: repo,
+		km:       km, // 把傳進來的倉管員放進口袋
 	}
 }
 
@@ -159,8 +163,11 @@ func (h *AuthHandler) LoginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 🌟 修正：改用純數字格式，避免空格與中文導致 CLI 解析 Key 錯誤
+	uidStr := fmt.Sprintf("%d", user.ID) // 產出的 UID 為 "23"，使用中文有雙引號轉義或空格截斷問題導致找不到真正的key
+
 	// 取得雙 Token
-	tokenString, refreshToken, err := auth.GenerateToken(user.Username)
+	tokenString, refreshToken, err := auth.GenerateToken(r.Context(), h.km, uidStr, user.Username)
 	if err != nil {
 		slog.Error("Token 簽發失敗", "component", "auth", "error", err.Error())
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -208,13 +215,39 @@ func (h *AuthHandler) RefreshHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	//2.驗證 Refresh Token 是否合法且未過期
-	username, err := auth.ValidateRefreshToken(cookie.Value)
+	// 🌟 改變 A：傳入 r.Context() 和 h.km，並將回傳的變數命名為 claims
+	claims, err := auth.ValidateRefreshToken(r.Context(), h.km, cookie.Value)
 	if err != nil {
 		http.Error(w, "憑證已過期，請重新登入", http.StatusUnauthorized)
 		return
 	}
-	//3.驗證成功，重新核發一組全新的雙 Token
-	newAccessToken, newRefreshToken, err := auth.GenerateToken(username)
+
+	// 🌟 黑名單機制：檢查使用者是否被列入全域黑名單！
+	isBanned, err := h.km.IsUserBlacklisted(r.Context(), claims.UID)
+	if err != nil {
+		slog.Error("黑名單查詢異常", "uid", claims.UID, "error", err.Error())
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	if isBanned {
+		slog.Warn("攔截已被封鎖使用者的 Refresh 請求", "uid", claims.UID, "username", claims.Name)
+		// 強制幫他擦除 Cookie 登出
+		http.SetCookie(w, &http.Cookie{
+			Name:     "refresh_token",
+			Value:    "",
+			HttpOnly: true,
+			Path:     "/",
+			MaxAge:   -1,
+		})
+
+		http.Error(w, "您的帳號已被封鎖", http.StatusForbidden) // 回傳 403
+		return
+	}
+
+	// 3.沒被封鎖，順利核發全新雙 Token (保留原 UID)
+	// 黑名單機制： 調整 GenerateToken 現在也要 ctx 和 km，且我們透過 claims.Name 取得使用者名字
+	newAccessToken, newRefreshToken, err := auth.GenerateToken(r.Context(), h.km, claims.UID, claims.Name)
 	if err != nil {
 		http.Error(w, "系統錯誤", http.StatusInternalServerError)
 		return
@@ -232,7 +265,7 @@ func (h *AuthHandler) RefreshHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
 		"token":    newAccessToken,
-		"username": username,
+		"username": claims.Name, // 🌟 改變 C：透過 claims.Name 回傳名字給前端
 	})
 }
 
@@ -273,9 +306,11 @@ func (h *AuthHandler) GuestLoginHandler(w http.ResponseWriter, r *http.Request) 
 	//🛡️ 商業邏輯：為了區分正式會員與遊客，強制加上 [遊客] 標籤
 	finalName := "[遊客]" + nickname
 
-	//// 直接發放 JWT
+	// 🌟 為遊客隨機產生一個暫時的 Guest UID
+	guestUID := "guest_" + uuid.New().String()[:8]
+
 	// 遊客只給予一組普通的 Token
-	accessToken, _, err := auth.GenerateToken(finalName)
+	accessToken, _, err := auth.GenerateToken(r.Context(), h.km, guestUID, finalName)
 	if err != nil {
 		http.Error(w, "Token 發放失敗", http.StatusInternalServerError)
 		return

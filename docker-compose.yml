@@ -1,6 +1,4 @@
 
-version: '3.8'
-
 services:
   postgres:
     image: postgres:15-alpine
@@ -21,7 +19,7 @@ services:
     container_name: flashchat_redis
     ports:
       - "6379:6379"  # 把貨櫃裡的 6379 洞口，接上你電腦的 6379 洞
-    command: redis-server --appenddonly yes # 【新增】開啟 AOF 持久化，重啟時資料不遺失
+    command: redis-server --appendonly yes # 【新增】開啟 AOF 持久化，重啟時資料不遺失
     restart: always # 【新增】同樣設定自動重啟，保持環境穩定
     volumes:
       - redis_data:/data # 【新增】將 Redis 的資料寫入虛擬硬碟

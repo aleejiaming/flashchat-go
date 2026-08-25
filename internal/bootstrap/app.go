@@ -1,7 +1,9 @@
 package bootstrap
 
 import (
+	"context"
 	"flashchat-go/handler"
+	"flashchat-go/internal/auth"
 	"flashchat-go/internal/database"
 	"flashchat-go/middleware"
 	"flashchat-go/repository"
@@ -10,6 +12,7 @@ import (
 	"net/http"
 
 	// 🌟 匯入 http-swagger 套件
+	"github.com/go-redis/redis/v8"
 	httpSwagger "github.com/swaggo/http-swagger"
 
 	// 🌟 必須匯入剛剛 swag init 幫你產生的 docs 資料夾！
@@ -21,6 +24,7 @@ import (
 type AppHandlers struct {
 	Auth *handler.AuthHandler
 	WS   *handler.WSHandler
+	Km   *auth.KeyManager
 }
 
 // 👷 背景打工人邏輯 (從 main 搬遷過來)
@@ -48,9 +52,27 @@ func InitializeApp(pgConnStr, redisAddr string, msgRepo repository.MessageReposi
 	hub := ws.NewHub(rdb, saveQueue)
 	go hub.Run() // 啟動廣播中心
 
-	// 4. 將完成裝配的資源注入控制器 (Handlers)
-	authHandler := handler.NewAuthHandler(userRepo)
-	wsHandler := handler.NewWSHandler(hub)
+	// 裝配KeyManager 1.1
+	keyManager := auth.NewKeyManager(rdb)
+
+	// 檢察系統有沒有主鑰匙 (primary_kid) 1.2
+	ctx := context.Background()
+	_, err := rdb.Get(ctx, "primary_kid").Result()
+
+	// 將完成裝配的資源注入控制器 (Handlers)
+	authHandler := handler.NewAuthHandler(userRepo, keyManager)
+	wsHandler := handler.NewWSHandler(hub, keyManager)
+
+	if err == redis.Nil { // redis.Nil 代表「找不到這個 key」
+		slog.Info("系統偵測到尚無密鑰，準備進行首次初始化...")
+		// 呼叫我們寫好的輪換功能，產生第一把鑰匙！
+		if err := keyManager.RotateKey(ctx); err != nil {
+			slog.Error("首次密鑰初始化失敗", "error", err)
+			// 實務上如果連密鑰都生不出來，系統應該直接停止 (panic 或 return err)
+		}
+	} else if err != nil {
+		slog.Error("檢查 primary_kid 發生異常", "error", err)
+	}
 
 	// 建立並設定專屬的路由器 (Mux)
 	mux := http.NewServeMux()
@@ -69,7 +91,7 @@ func InitializeApp(pgConnStr, redisAddr string, msgRepo repository.MessageReposi
 	// 🌟 這些是需要 Token 保護的私人路由 (Private Routes)
 	// 使用 middleware.AuthMiddleware 把原本的 Handler 「包」起來
 	// 需要驗證的 WebSocket 路由
-	mux.HandleFunc("GET /ws", middleware.AuthMiddleware(wsHandler.HandleConnections))
+	mux.HandleFunc("GET /ws", middleware.AuthMiddleware(keyManager, wsHandler.HandleConnections))
 
 	// 這樣當你訪問 /swagger/ 時，就會吐出 Swagger UI 網頁
 	mux.HandleFunc("/swagger/", httpSwagger.Handler(

@@ -8,14 +8,14 @@ import (
 	"strings"
 )
 
-// 定義私有型別 contextKey，專門用於此 Package 的 Context，避免其
 type contextKey string
 
-// 宣告常數作為 Key，確保全域唯一性
-const UserContextKey contextKey = "username"
+// 🌟 修改 1：將常數名稱改為 ClaimsContextKey，因為我們現在要塞整包 Claims 進去了
+const ClaimsContextKey contextKey = "claims"
 
+// 🌟 修改 2：Middleware 現在需要認識倉管員 (km)，所以要當作參數傳進來
 // AuthMiddleware 是一個中介軟體，負責攔截請求並驗證 JWT
-func AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
+func AuthMiddleware(km *auth.KeyManager, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// 宣告一個空字串準備接收 Token
 		var tokenString string
@@ -40,22 +40,24 @@ func AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			http.Error(w, "缺少驗證憑證", http.StatusUnauthorized)
 			return
 		}
-
+		// 🌟 修改 3：傳入 r.Context() 和 km，並接收 claims 物件
 		// 3. 呼叫 auth 模組來驗證 Token，實際的 JWT 解析邏輯：驗證簽章、過期時間，並提取 payload
-		username, err := auth.ValidateToken(tokenString)
+		claims, err := auth.ValidateToken(r.Context(), km, tokenString)
 		if err != nil {
 			slog.Error("【除錯】JWT 驗證失敗", "error_detail", err.Error())
 			// 如果過期或被篡改，拒絕請求
 			http.Error(w, "Token 無效或已過期", http.StatusUnauthorized)
 			return
 		}
+
 		// ==========================================
-		// 🌟 商業邏輯核心：優雅的 Context (上下文) 傳遞
+		// 商業邏輯核心：優雅的 Context (上下文) 傳遞
 		// ==========================================
 		// 將解析出來的「使用者名稱」塞進這個 HTTP 請求專屬的背包 (Context) 裡。
 		// 這樣後面的 Handler 只要伸手進背包，就能知道現在是誰在操作了！
-		ctx := context.WithValue(r.Context(), UserContextKey, username)
 
+		// 🌟 修改 4：把整包 claims 物件塞進這個 HTTP 請求的背包裡
+		ctx := context.WithValue(r.Context(), ClaimsContextKey, claims)
 		// 產生一個帶有新背包的 Request
 		rWithContext := r.WithContext(ctx)
 		// 4. 警衛放行！把帶有名字的請求交給下一個處理器 (也就是真正的 Handler)
@@ -63,9 +65,18 @@ func AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// 🌟 修改 5：新增一個拿 Claims 的小幫手，未來要做登出時會用到！
+func GetClaims(ctx context.Context) (*auth.Claims, bool) {
+	claims, ok := ctx.Value(ClaimsContextKey).(*auth.Claims)
+	return claims, ok
+}
+
+// 🌟 修改 6：為了不破壞你舊的程式碼，原有的 GetUsername 改成去呼叫 GetClaims
 // 封裝一個公開的輔助函式 (Helper)，讓下游的 Handler 能夠安全地提取 Username
 func GetUsername(ctx context.Context) (string, bool) {
-	username, ok := ctx.Value(UserContextKey).(string)
-	return username, ok
+	if claims, ok := GetClaims(ctx); ok {
+		return claims.Name, true //從 Claims 中把名子取出來還給舊程式
+	}
+	return "", false
 
 }
