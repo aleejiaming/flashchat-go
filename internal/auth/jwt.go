@@ -19,6 +19,7 @@ var refreshSecretKey = []byte("flashchat_refresh_secret_2026")
 type Claims struct {
 	UID                  string `json:"uid"` // 👈 新增：使用者的唯一標識符 (如 DB 中的 ID)`
 	Name                 string `json:"name"`
+	TokenType            string `json:"token_type"` // 👈 新增：用來區分 "access" 或 "refresh"
 	jwt.RegisteredClaims        // 嵌入官方的標準欄位
 }
 
@@ -40,8 +41,9 @@ func GenerateToken(ctx context.Context, km *KeyManager, uid string, name string)
 	// 2. 產生 Access Token (壽命：15 分鐘)
 	accessTokenID := uuid.New().String()
 	accessClaims := &Claims{
-		UID:  uid, // 👈 寫入 UID
-		Name: name,
+		UID:       uid, // 👈 寫入 UID
+		Name:      name,
+		TokenType: "access", // 🌟 貼上通行證標籤
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(15 * time.Minute)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
@@ -66,8 +68,9 @@ func GenerateToken(ctx context.Context, km *KeyManager, uid string, name string)
 	// 💡 建議：Refresh Token 也給它一個獨立的 ID，未來若需要單獨拉黑它會很好用
 	refreshTokenID := uuid.New().String()
 	refreshClaims := &Claims{
-		UID:  uid, // 👈 修正：必須補上 UID！否則 Refresh 換發時解出的 claims.UID 會是空字串
-		Name: name,
+		UID:       uid, // 👈 修正：必須補上 UID！否則 Refresh 換發時解出的 claims.UID 會是空字串
+		Name:      name,
+		TokenType: "refresh", // 🌟 貼上換發憑證標籤
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(7 * 24 * time.Hour)), // Token 到期時間
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
@@ -87,12 +90,30 @@ func GenerateToken(ctx context.Context, km *KeyManager, uid string, name string)
 
 // ValidateToken 驗證 Access Token
 func ValidateToken(ctx context.Context, km *KeyManager, tokenString string) (*Claims, error) {
-	return parseToken(ctx, km, tokenString)
+	// 呼叫共用的底層邏輯
+	claims, err := parseToken(ctx, km, tokenString)
+	if err != nil {
+		return nil, err
+	}
+	// 🌟 拿到解碼結果後，多加一道防線：檢查標籤是不是 access
+	if claims.TokenType != "access" {
+		return nil, fmt.Errorf("無效的 Token 類型：期望 access，卻得到 %s", claims.TokenType)
+	}
+	return claims, nil
 }
 
 // ValidateRefreshToken 驗證 Refresh Token
 func ValidateRefreshToken(ctx context.Context, km *KeyManager, tokenString string) (*Claims, error) {
-	return parseToken(ctx, km, tokenString)
+	//  呼叫共用的底層邏輯
+	claims, err := parseToken(ctx, km, tokenString)
+	if err != nil {
+		return nil, err
+	}
+	// 🌟 拿到解碼結果後，多加一道防線：檢查標籤是不是 refresh
+	if claims.TokenType != "refresh" {
+		return nil, fmt.Errorf("嚴重安全性風險：非 refresh token 嘗試進行換發動作")
+	}
+	return claims, nil
 }
 
 // 內部共用的解析邏輯
