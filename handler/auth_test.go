@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"flashchat-go/internal/auth"
 	"flashchat-go/repository"
 )
 
@@ -20,6 +21,7 @@ type mockUserRepository struct {
 	fakeDB map[string]repository.User
 }
 
+// 加上參數 km
 func newMockUserRepository() *mockUserRepository {
 	return &mockUserRepository{
 		fakeDB: make(map[string]repository.User),
@@ -53,9 +55,15 @@ func (m *mockUserRepository) GetUserByUsername(username string) (*repository.Use
 // 2. 撰寫 API 單元測試
 // ==========================================
 func TestRegisterHandler(t *testing.T) {
-	// 1. 準備環境：聘請假倉管員，並把配發給 AuthHandler
+	// 1. 準備環境：聘請假倉管員 (Mock Repo)
 	mockRepo := newMockUserRepository()
-	authHandler := NewAuthHandler(mockRepo)
+
+	// 2. 準備環境：生出一個假的 KeyManager
+	// (先給一個空的指標，如果你的 Register 邏輯還沒用到很深層的 KM 功能，這樣就夠了)
+	testKM := &auth.KeyManager{}
+
+	// 3. 🌟 關鍵修正：把 Repo 和 KeyManager "同時" 配發給 AuthHandler
+	authHandler := NewAuthHandler(mockRepo, testKM)
 
 	// 2. 準備測試資料表 (Table-Driven Tests)
 	tests := []struct {
